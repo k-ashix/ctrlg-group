@@ -211,6 +211,21 @@ if (-not $KeepBinaries) {
     if ($cleanupTarget -and (Test-Path $cleanupTarget)) {
         Remove-Item -Recurse -Force $cleanupTarget -ErrorAction SilentlyContinue
     }
+
+    # Sweep EVERY leftover .exe anywhere under tests\ (e.g. exes built straight
+    # into tests\ by an older run or a manual g++ invocation). This guarantees
+    # no .exe is left behind in the test folder after verification.
+    if (Test-Path $TestsDir) {
+        $strayExes = Get-ChildItem -Path $TestsDir -Filter "*.exe" -File -Recurse -ErrorAction SilentlyContinue
+        foreach ($stray in $strayExes) {
+            Remove-Item -Force $stray.FullName -ErrorAction SilentlyContinue
+            if (Test-Path $stray.FullName) {
+                Emit ("  [WARN] could not remove leftover exe (locked?): {0}" -f $stray.FullName) Yellow
+            } else {
+                $script:transcript.Add("  [CLEAN] removed leftover exe: " + $stray.FullName)
+            }
+        }
+    }
 }
 
 exit $exit

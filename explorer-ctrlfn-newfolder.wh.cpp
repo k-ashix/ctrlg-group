@@ -2,7 +2,7 @@
 // @id              explorer-ctrlfn-newfolder
 // @name            Explorer Ctrl+F+N to New Folder
 // @description     Ctrl+F+N makes a new folder and names it - inline rename (native) or a themed light/dark popup box, one setting. Batch: <name> 1..N.
-// @version         0.9.0
+// @version         0.10.0
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -17,18 +17,20 @@
 /*
 # 📁 Explorer Ctrl+F+N -> New Folder
 
-Make a new folder in File Explorer without touching the mouse. The folder
-appears where you are browsing, already selected - type a name, press Enter.
-
-Works in any filesystem Explorer window, tab, or sub-folder, and on the Desktop.
+Make a new folder or batch of folders in File Explorer (including sub-folder & Desktop)
 (*This PC* / *Quick access* and other non-filesystem spots are skipped.)
 
-**Why "Ctrl + F + N"?** **F** for *Folder*, **N** for *Name*.
+## **Why "Ctrl + F + N"?** **F** for *Folder*, **N** for *Name*.
+
+> **Good to know first:** only **one** shortcut is active at a time - firing any
+> other chord does nothing. Hold Ctrl for the whole gesture 
+> **Esc** cancels and creates nothing.
 
 ## ⌨️ How to use
 1. Open File Explorer (or click an empty Desktop spot).
-2. **Hold Ctrl** the whole time -> tap **F** -> tap **N**.
-3. Type a name, press **Enter**.
+2. **Hold Ctrl** the whole time -> tap **F** -> tap **N**. Type a name, press **Enter**.
+3. **Hold Ctrl** the whole time -> tap **F** -> tap **N** -> tap **any digit (3, 8, 12) to create folders in batch**.
+4. **Hold Ctrl** the whole time -> tap **F** -> tap **N** -> tap **you template key to create folders mentioned in you template**.
 
 > 🔒 **Ctrl must stay down for the entire shortcut.** Let go and the gesture is
 > abandoned - nothing is created.
@@ -41,12 +43,14 @@ typed so far (like Explorer's own rename).
 | Setting | Default | What it does |
 |---|---|---|
 | **Name folders with a popup box** | OFF (inline) | **OFF** - folder opens in Explorer's inline rename box; type + Enter. Feels native. **ON** - a themed light/dark popup box; type + Create. More reliable, same in every folder. |
-| **Multiple folders in one go** | OFF | ON: type a number right after the shortcut, then Enter (e.g. `5` -> five folders). No number = one; Esc cancels. First one opens ready to rename. |
+| **Multiple folders in one go** | ON | ON (default): type a number right after the shortcut, then Enter (e.g. `5` -> five folders). No number = one; Esc cancels. **Folder templates fire regardless of this setting.** OFF: always one folder. |
 | **Max folders per run** | 25 | Cap per trigger. Range 1-100. |
-| **Auto-resolve name clashes** | ON | ON: numbers past existing folders (`New folder (2)`, `(3)`...). OFF: only the plain `New folder`, skipping a clash instead of numbering. |
-| **Open the new folder after creating it** | OFF | ON: browse into the new folder in the **same** window (no new window). Single-folder only - never for a batch. |
-| **Type speed** | Normal | Grace period for typing before the box gives up and commits/cancels on its own. Covers two windows: the batch-count entry (right after the shortcut) and the folder-name rename. **Normal** ≈ 1.2s count / 30s name, **Relaxed** ≈ 2.5s / 60s, **Patient** ≈ 4s / 120s. Pick a slower preset if the box closes before you finish typing. The Ctrl+F→N key gap is fixed and not affected. |
-| **Batch numbering pattern** | `Project 1` | How the number is written for a named batch. Choose `Project 1` (default), `Project-01`, `Project-001`, or `Project (01)`. Every pattern skips folders that already exist, so a batch never overwrites. |
+| **Auto-resolve name clashes** | ON | ON: numbers past existing folders (`New folder (2)`, `(3)`...) - a folder **every** time. OFF: only the plain `New folder`, so once it exists the shortcut does nothing. If it "only works once", turn this ON. |
+| **Open the new folder after creating it** | OFF | ON: browse into the new folder in the **same** window. Single-folder only|
+| **Type speed** | Normal | How long the box waits before it commits/cancels on its own. **Normal** ≈ 1.2s count / 30s name, **Relaxed** ≈ 2.5s / 60s, **Patient** ≈ 4s / 120s. Pick slower if the box closes too soon. |
+| **Batch numbering pattern** | `Project 1` | Number style for a named batch. All skip existing folders. |
+| **Folder templates** | *(empty)* | Your own fixed folder sets. Visit `Template Creation`. **Name is required** - a blank name is ignored.|
+| **Template name collisions** | Skip | For templates: `Skip` existing folders, `number` a sibling, or `stop` (create nothing). Overrides *Auto-resolve name clashes*. |
 
 **Naming:** one folder becomes `<name>`; several become a numbered batch whose
 style you pick with **Batch numbering pattern** (example base `New folder`):
@@ -66,14 +70,40 @@ style you pick with **Batch numbering pattern** (example base `New folder`):
 continues past the highest run instead of clobbering. A blank name falls back to
 `New folder` / `New folder (2)`.
 
-## 🧠 Before you use it - keep in mind
+## 📁 Folder templates
 
-| Thing to know | What it means |
-|---|---|
-| **Only your chosen shortcut is active** | One at a time. Firing a different chord creates nothing - switch it in Settings. (Ctrl+N and Ctrl+N+F can't both be on: both start with Ctrl+N and mean opposite things.) |
-| **Hold Ctrl the whole time, then let go to finish** | Release with no number = one folder; type a number first = that many. Esc cancels and creates nothing. |
-| **"Auto-resolve name clashes" (default on)** | On = a folder *every* time (`New folder (2)`, `(3)`...). Off = only the plain `New folder`, so once it exists the shortcut does nothing. If it "only works once", turn this on. |
-| **Only in File Explorer or the Desktop** | Everywhere else your keys behave normally. |
+Make the **same set of folders every time** just with few keypress.
+
+**Use it:** press your trigger (`Ctrl -> F -> N`), then the template key - no
+typing, no rename box. (Digits are used to create multiple folders in batch with same name while letters pick
+templates where you pre-define you folder names.)
+
+### Template examples
+
+| # | **One template per line `key=Name=Folder1\|Folder2\|Folder3`** | Press | Will Create |
+|---|---|---|---|
+| 1 | `i=Image=raw\|jpg\|png` | `i` | `raw`, `jpg`, `png` |
+| 2 | `w=Work=src\|docs\|assets` | `w` | `src`, `docs`, `assets` |
+| 3 | `p=Project=01 Brief\|02 Assets\|03 Final` | `p` | `01 Brief`, `02 Assets`, `03 Final` |
+
+### Templates Creation
+
+| # | Part / rule | What it means | Example |
+|---|---|---|---|
+| ✏️ | **key** | The letter you press after the trigger. One letter A-Z, **case-insensitive** (`i` = `I`, stored lowercase). Separate from the name. | `i` |
+| ✏️ | **Name** | Assign a label, anything you like. Only for your reference. | `Images` |
+| ✏️ | **Folders** | Everything after the 2nd `=`, split on the `\|` pipe. Each piece is one folder. | `raw\|jpg\|png` |
+| ✅ | **Spaces are fine** | Spaces **inside or around** a name are kept exactly - `01 Explain & Brief`. Names are **not** trimmed,| `01 Explain & Brief` |
+| 📏 | **26 templates max** | One per letter A-Z. | - |
+| 📏 | **100 folders max** | Per template; each list is independent. | - |
+| 📏 | **One template per key** | Same key twice = the **first** line wins, later ones ignored. Use a unique key per line. | - |
+| 🚫 | **Bad characters** | A name containing `\` `/` `:` `*` `?` `"` `<` `>` `\|` is skipped (same set a typed name strips). So is `.`, `..`, or any name starting with `..`. | `a\b`, `../x`, `C:\x` |
+| 🚫 | **Empty / all-spaces / control chars** | Blank pieces, spaces-only names, and control characters (below ASCII 0x20) are skipped. | (empty) |
+| 🚫 | **Duplicate in one line** | The same name twice in one template is kept only once, **case-insensitively** (Windows folders). | `raw\|RAW` -> `raw` |
+| 🔒 | **Never overwrites** | Existing folders follow *Template name collisions* (skip / number / stop). | - |
+
+> Note: the `,` comma is **allowed** in a folder name - only `\` `/` `:` `*`
+> `?` `"` `<` `>` `|` `..` and control characters are rejected.
 
 ## 🆚 How this is different
 
@@ -97,49 +127,55 @@ folder. **Ctrl+N** / **Ctrl+N+F** are for people who don't mind giving up the
 "New window" shortcut.
 
 ### vs. Windows' built-in folder creation & other mods
-The two forks below are the mods this one grew out of; Windows' own options are
-included for reference. This mod is the only one that creates folders, lets you
-name them in the same motion, makes several at once, and lets you choose the
-shortcut.
 
-| Feature | **This mod** | Windows right-click New Folder | Windows Ctrl+Shift+N | *Explorer Ctrl+N to New File* | *Explorer Ctrl+Q to New Folder* (earlier fork) |
+**Short version:** this mod is the only one that creates a folder, **names it in
+the same motion**, makes a **batch** at once, and lets you **pick the shortcut**.
+The two forks below are what it grew out of; Windows' own options are shown for
+reference.
+
+Legend: ✅ yes · ❌ no · ➖ partial / not applicable.
+
+| Feature | **This mod** | Win right-click | Win Ctrl+Shift+N | *Ctrl+N -> New File* fork | *Ctrl+Q -> New Folder* fork |
 |---|---|---|---|---|---|
 | Creates a folder | ✅ | ✅ | ✅ | ❌ (empty file) | ✅ |
 | Keyboard-only (no mouse) | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Names it in the same motion | ✅ inline **or** popup | ❌ | ❌ | ➖ inline rename | ❌ unnamed |
-| Make several at once (batch) | ✅ up to 100 | ❌ | ❌ | ❌ | ❌ |
-| Choice of batch numbering | ✅ 6 patterns (`1` / `-01` / `-001` / `_01` / `_001` / `(01)`) | ❌ | ❌ | ❌ | ❌ |
-| Smart name-clash handling | ✅ number or skip | ➖ always numbers | ➖ always numbers | ➖ | ➖ |
-| Choice of shortcut | ✅ 4 options | ❌ fixed | ❌ fixed | ❌ Ctrl+N only | ❌ Ctrl+Q only |
+| Batch: several at once | ✅ up to **100** | ❌ | ❌ | ❌ | ❌ |
+| Batch numbering styles | ✅ **6** (`1` `-01` `-001` `_01` `_001` `(01)`) | ❌ | ❌ | ❌ | ❌ |
+| Name-clash handling | ✅ number **or** skip | ➖ always numbers | ➖ always numbers | ➖ | ➖ |
+| Folder templates (fixed sets) | ✅ up to 26 keys | ❌ | ❌ | ❌ | ❌ |
+| Choice of shortcut | ✅ **4** options | ❌ fixed | ❌ fixed | ❌ Ctrl+N only | ❌ Ctrl+Q only |
 | Keeps native Explorer shortcuts | ✅ (Ctrl+F+N default) | ✅ | ✅ | ❌ takes over New window | ➖ uses free Ctrl+Q |
-| Light/dark themed popup | ✅ | n/a | n/a | ❌ | ❌ |
-| Race-condition stability fixes | ✅ | n/a | n/a | ➖ | ➖ |
+| Light/dark themed popup | ✅ | ➖ | ➖ | ❌ | ❌ |
+| Race-condition stability fixes | ✅ | ✅ | ✅ | ➖ | ➖ |
 
-**In short:** the other folder options can't name or batch, the *Ctrl+N to New
-File* mod makes blank files and hijacks "New window", and the earlier *Ctrl+Q*
-fork makes a single unnamed folder on one fixed key. This mod adds naming
-(inline or a themed popup), batch creation, clash handling, and a choice of
-shortcut - with the Shell-notify + thread-sync work that keeps the folder fully
-created before the rename fires.
+**Bottom line:** the built-in options can't name or batch; the *Ctrl+N -> New
+File* fork makes blank files and hijacks "New window"; the *Ctrl+Q* fork makes
+one unnamed folder on a fixed key. This mod adds naming (inline or themed popup),
+batch creation, templates, clash handling, and a choice of shortcut - with the
+Shell-notify + thread-sync work that keeps the folder fully created before the
+rename fires.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- trigger: ctrl_f_n
-  $name: Trigger shortcut
+- shortcut: "Ctrl+F+N"
+  $name: Shortcut
   $description: >-
-    Which keystroke creates a new folder in the active Explorer location.
+    Pick one of the four supported shortcuts. Only one is active at a time.
   $options:
-  - ctrl_f_n: Ctrl+F+N - hold Ctrl, tap F, then N (keeps Ctrl+F search)
-  - ctrl_n: Ctrl+N - repurposes the New window shortcut
-  - ctrl_n_f: Ctrl+N+F - hold Ctrl, tap N, then F (repurposes New window)
-  - ctrl_shift_n: Ctrl+Shift+N - Windows' own New folder shortcut, plus naming and batch
-- multiFolder: false
+  - "Ctrl+F+N": Ctrl+F+N (default) - keeps every native Explorer shortcut
+  - "Ctrl+Shift+N": Ctrl+Shift+N - the exact keys Windows uses for New folder
+  - "Ctrl+N": Ctrl+N - single press (replaces "New window")
+  - "Ctrl+N+F": Ctrl+N+F - hold Ctrl, tap N then F (replaces "New window")
+- multiFolder: true
   $name: Multiple folders in one go
   $description: >-
-    On: type a number right after the trigger, then Enter, to make that many at
-    once (no number = one; Esc cancels). Off: always one folder.
+    On (default): type a number right after the trigger, must rename then Enter, to make
+    that many at once (no number = one; Esc cancels). Folder templates fire
+    regardless of this setting (press a template key after the trigger). Off:
+    the count gesture always makes one folder.
 - maxFolders: 25
   $name: Max folders per run
   $description: >-
@@ -152,8 +188,7 @@ created before the rename fires.
 - useDialog: false
   $name: Name folders with a popup box
   $description: >-
-    Off: type into Explorer's inline rename box (feels native). On: a themed
-    light/dark popup box - type the name, press Create (more reliable).
+    Off: type into Explorer's inline rename box (feels native). On: a popup box - type the name, press Create (more reliable).
 - openAfterCreate: false
   $name: Open the new folder after creating it
   $description: >-
@@ -177,12 +212,26 @@ created before the rename fires.
     base "New folder"). Existing folders are always skipped, so a batch never
     overwrites and still makes the count you asked for.
   $options:
-  - space: "New folder 1, New folder 2, ... (default)"
-  - dash2: "New folder-01, New folder-02, ..."
-  - dash3: "New folder-001, New folder-002, ..."
-  - paren2: "New folder (01), New folder (02), ..."
-  - under2: "New folder_01, New folder_02, ..."
-  - under3: "New folder_001, New folder_002, ..."
+  - space: "New folder 1, New folder 2 (default)"
+  - dash2: "New folder-01, New folder-02"
+  - dash3: "New folder-001, New folder-002"
+  - paren2: "New folder (01), New folder (02)"
+  - under2: "New folder_01, New folder_02"
+  - under3: "New folder_001, New folder_002"
+- folderTemplates:
+  - ""
+  $name: Folder templates
+  $description: >-
+    One template per line using key=Name=Folder 1|Folder 2|Folder 3. You pick
+    the key (a single letter A-Z), separate from the name. Check Templates in Readme
+- templateCollision: skip
+  $name: Template name collisions
+  $description: >-
+    What to do when a folder in the template already exists in the target directory.
+  $options:
+  - skip: Skip the ones that exist, create the rest
+  - number: Make a numbered sibling (img, img 2, ...) using the batch pattern
+  - stop: Create nothing and cancel (safest)
 */
 // ==/WindhawkModSettings==
 
@@ -229,15 +278,30 @@ static void SafeRelease(T*& p) {
 static IUIAutomation* g_uia = nullptr;
 static volatile LONG g_actionRunning = 0;
 
-// Trigger mode: 0 = Ctrl+F+N (default), 1 = Ctrl+N, 2 = Ctrl+N+F,
-// 3 = Ctrl+Shift+N (overlays native New folder).
-static volatile LONG g_triggerMode = 0;
+// User-configurable shortcut. The final key fires while every preceding key
+// remains held. Defaults to Ctrl+F+N when the setting is invalid.
+struct ShortcutConfig {
+    int triggerVk;
+    int heldVks[4];
+    int heldCount;
+};
+static ShortcutConfig g_shortcut = {'N', {VK_CONTROL, 'F', 0, 0}, 2};
+
+// #3: the SAME shortcut packed into ONE 64-bit word (see PackShortcut). The LL
+// keyboard hook reads THIS via a single atomic load instead of the multi-field
+// g_shortcut struct, which a settings-thread write could tear. Default Ctrl+F+N:
+// triggerVk 'N' | heldCount 2 | heldVks[0]=Ctrl | heldVks[1]='F'.
+static volatile LONG64 g_shortcutPacked =
+    (LONG64)'N' | ((LONG64)2 << 8) |
+    ((LONG64)VK_CONTROL << 16) | ((LONG64)'F' << 24);
 
 // Multi-folder creation (v0.2.0). Default cap 25; the hard cap 100 can never be
 // exceeded even if the user sets maxFolders higher.
 static const int kFolderDefaultMax = 25;
 static const int kFolderHardCap = 100;
 static volatile LONG g_multiFolder = 0;                 // toggle (default off)
+static volatile LONG g_hasTemplates = 0;                // 1 if >=1 template loaded (hook reads lock-free)
+static volatile LONG g_templateKeyMask = 0;             // #1: bit (c-'a') set == letter 'c' is a bound template key (hook reads lock-free)
 static volatile LONG g_maxFolders = kFolderDefaultMax;  // raw maxFolders setting
 static volatile LONG g_autoResolveNames = 1;            // number clashes (default on)
 static volatile LONG g_useDialog = 0;                   // 0 = inline rename, 1 = popup box
@@ -276,24 +340,222 @@ static volatile LONG g_actionPosted = 0;
 static volatile LONG g_inlineRenameActive = 0;  // a rename watch is running
 static volatile LONG g_inlineEscPressed = 0;    // Esc seen during that watch
 
-static void LoadSettings() {
-    PCWSTR trigger = Wh_GetStringSetting(L"trigger");
+// ---- Folder Templates: shared types + load-time state ----
+// Declared here (ABOVE LoadSettings) because LoadSettings reads the configured
+// templates into g_templates at load time. The pure-logic functions
+// (NormalizeTemplateKey, CleanTemplateFolders, ResolveTemplateKeys,
+// ResolveTemplateFolders) are defined lower down -- ResolveTemplateFolders
+// depends on FormatBatchName, which is also defined below.
+static const int kMaxTemplates = 26;
+static const int kMaxFoldersPerTemplate = 100;
 
-    LONG mode = 0;  // ctrl_f_n
-    if (trigger) {
-        if (wcscmp(trigger, L"ctrl_n") == 0) {
-            mode = 1;
-        } else if (wcscmp(trigger, L"ctrl_n_f") == 0) {
-            mode = 2;
-        } else if (wcscmp(trigger, L"ctrl_shift_n") == 0) {
-            mode = 3;
-        } else {
-            mode = 0;
-        }
-        Wh_FreeStringSetting(trigger);
+enum TemplateCollision { TC_Skip = 0, TC_Number = 1, TC_Stop = 2 };
+
+struct FolderTemplate {
+    std::wstring key;                    // user-assigned single letter
+    std::wstring name;
+    std::vector<std::wstring> folders;
+};
+
+struct ResolvedTemplate {
+    wchar_t key = 0;                     // user-assigned key, lowercased
+    std::wstring name;
+    std::vector<std::wstring> folders;   // validated, deduped, capped
+};
+
+// Load-time template state, read later by the hook/worker threads. A
+// std::vector cannot be updated with InterlockedExchange, so g_templatesCs
+// guards BOTH g_templates and g_templateCollision. The CS is created in
+// WhTool_ModInit before anything can call LoadSettings and destroyed in
+// WhTool_ModUninit after the hook/worker have stopped.
+static std::vector<ResolvedTemplate> g_templates;
+static LONG g_templateCollision = TC_Skip;
+static CRITICAL_SECTION g_templatesCs;
+
+// Defined lower down (after CleanTemplateFolders); forward-declared so
+// LoadSettings can resolve templates at load time.
+static std::vector<ResolvedTemplate> ResolveTemplateKeys(
+        const std::vector<FolderTemplate>& raw,
+        std::vector<std::wstring>* ignored);
+
+static int ShortcutTokenToVk(std::wstring token) {
+    for (wchar_t& ch : token) ch = static_cast<wchar_t>(towupper(ch));
+    if (token == L"CTRL" || token == L"CONTROL") return VK_CONTROL;
+    if (token == L"ALT") return VK_MENU;
+    if (token == L"SHIFT") return VK_SHIFT;
+    if (token == L"WIN" || token == L"WINDOWS") return VK_LWIN;
+    if (token == L"ENTER") return VK_RETURN;
+    if (token == L"SPACE") return VK_SPACE;
+    if (token == L"TAB") return VK_TAB;
+    if (token == L"ESC" || token == L"ESCAPE") return VK_ESCAPE;
+    if (token == L"BACKSPACE") return VK_BACK;
+    if (token == L"DELETE" || token == L"DEL") return VK_DELETE;
+    if (token == L"INSERT" || token == L"INS") return VK_INSERT;
+    if (token == L"HOME") return VK_HOME;
+    if (token == L"END") return VK_END;
+    if (token == L"PAGEUP" || token == L"PGUP") return VK_PRIOR;
+    if (token == L"PAGEDOWN" || token == L"PGDN") return VK_NEXT;
+    if (token == L"LEFT") return VK_LEFT;
+    if (token == L"RIGHT") return VK_RIGHT;
+    if (token == L"UP") return VK_UP;
+    if (token == L"DOWN") return VK_DOWN;
+    if (token.size() == 1 && ((token[0] >= L'A' && token[0] <= L'Z') ||
+                              (token[0] >= L'0' && token[0] <= L'9'))) {
+        return token[0];
     }
+    if (token.size() >= 2 && token[0] == L'F') {
+        int n = _wtoi(token.c_str() + 1);
+        if (n >= 1 && n <= 24) return VK_F1 + n - 1;
+    }
+    return 0;
+}
 
-    InterlockedExchange(&g_triggerMode, mode);
+static bool ParseShortcut(PCWSTR text, ShortcutConfig* result) {
+    if (!text || !result) return false;
+    std::vector<int> keys;
+    std::wstring input(text);
+    size_t start = 0;
+    while (start <= input.size()) {
+        size_t end = input.find(L'+', start);
+        std::wstring token = input.substr(start, end - start);
+        size_t first = token.find_first_not_of(L" \t");
+        size_t last = token.find_last_not_of(L" \t");
+        if (first == std::wstring::npos) return false;
+        token = token.substr(first, last - first + 1);
+        int vk = ShortcutTokenToVk(token);
+        if (!vk || keys.size() >= 5) return false;
+        keys.push_back(vk);
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    if (keys.size() < 2) return false;
+    ShortcutConfig parsed = {};
+    parsed.triggerVk = keys.back();
+    parsed.heldCount = static_cast<int>(keys.size() - 1);
+    for (int i = 0; i < parsed.heldCount; ++i) {
+        if (keys[i] == parsed.triggerVk) return false;
+        parsed.heldVks[i] = keys[i];
+    }
+    *result = parsed;
+    return true;
+}
+
+// #3: pack / unpack ShortcutConfig <-> one 64-bit word (mirror of
+// tests/newfolder_logic.h PackShortcut/UnpackShortcut). The hook reads the
+// shortcut with a single atomic load, never a torn multi-field struct read.
+static LONG64 PackShortcut(const ShortcutConfig& s) {
+    int heldCount = s.heldCount;
+    if (heldCount < 0) heldCount = 0;
+    if (heldCount > 4) heldCount = 4;
+    unsigned long long p = 0;
+    p |= (unsigned long long)(s.triggerVk & 0xFF);
+    p |= (unsigned long long)(heldCount & 0x7) << 8;
+    for (int i = 0; i < 4; ++i) {
+        int vk = (i < heldCount) ? (s.heldVks[i] & 0xFF) : 0;
+        p |= (unsigned long long)vk << (16 + i * 8);
+    }
+    return (LONG64)p;
+}
+static ShortcutConfig UnpackShortcut(LONG64 packed) {
+    unsigned long long p = (unsigned long long)packed;
+    ShortcutConfig s = {};
+    s.triggerVk = (int)(p & 0xFF);
+    s.heldCount = (int)((p >> 8) & 0x7);
+    if (s.heldCount > 4) s.heldCount = 4;
+    for (int i = 0; i < 4; ++i) {
+        s.heldVks[i] = (int)((p >> (16 + i * 8)) & 0xFF);
+    }
+    return s;
+}
+// Read the published shortcut snapshot with a single interlocked load.
+static ShortcutConfig CurrentShortcut() {
+    return UnpackShortcut(InterlockedCompareExchange64(&g_shortcutPacked, 0, 0));
+}
+
+// #4: keys the F2-rename fallback must see released before it injects F2:
+// the three standard modifiers PLUS every key in the configured shortcut,
+// deduped (mirror of tests/newfolder_logic.h ShortcutReleaseWaitVks). Waiting
+// for a fixed Ctrl/Alt/Shift/N/F set was wrong once the shortcut became
+// configurable (e.g. Alt+F2 never waited for the F2 trigger).
+static std::vector<int> ShortcutReleaseWaitVks(const ShortcutConfig& s) {
+    std::vector<int> out = { VK_CONTROL, VK_MENU, VK_SHIFT };
+    auto add = [&out](int vk) {
+        if (vk == 0) return;
+        for (int e : out) if (e == vk) return;
+        out.push_back(vk);
+    };
+    int heldCount = s.heldCount;
+    if (heldCount > 4) heldCount = 4;
+    for (int i = 0; i < heldCount; ++i) add(s.heldVks[i]);
+    add(s.triggerVk);
+    return out;
+}
+
+// #8-2: is `vk` a modifier that can be HELD to keep a gesture alive
+// (Ctrl / Shift / Alt / Win, incl. L/R variants)? Mirror of
+// tests/newfolder_logic.h IsHoldModifierVk.
+static bool IsHoldModifierVk(int vk) {
+    return vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+           vk == VK_SHIFT   || vk == VK_LSHIFT   || vk == VK_RSHIFT   ||
+           vk == VK_MENU    || vk == VK_LMENU    || vk == VK_RMENU    ||
+           vk == VK_LWIN    || vk == VK_RWIN;
+}
+
+// #8-2: the count/template capture window stays alive while the CONFIGURED
+// shortcut's hold-modifier(s) are still physically down -- Ctrl for Ctrl+F+N,
+// Alt for Alt+F2, Win for Win+N. The old code hard-coded VK_CONTROL, so a
+// non-Ctrl shortcut committed the default folder on the first follow-up key
+// (batch counts and template letters were unreachable).
+// #8-3: for a MULTI-modifier shortcut (e.g. Ctrl+Shift+N) EVERY configured
+// hold-modifier must remain down -- the gesture spec is "all preceding keys
+// held", so releasing EITHER Ctrl OR Shift ends the window. (An OR check here
+// was a bug: it kept the window alive when only one of the two was still down.)
+// If the shortcut holds no modifier, there is nothing to release, so the window
+// is treated as held for its duration (it ends via Enter / Escape / timeout).
+// Mirror of tests/newfolder_logic.h IsGestureModifierHeld.
+static bool IsGestureModifierHeldNow(const ShortcutConfig& s) {
+    int heldCount = s.heldCount;
+    if (heldCount > 4) heldCount = 4;
+    bool anyModifier = false;
+    for (int i = 0; i < heldCount; ++i) {
+        int vk = s.heldVks[i];
+        if (!IsHoldModifierVk(vk)) {
+            continue;
+        }
+        anyModifier = true;
+        if ((GetAsyncKeyState(vk) & 0x8000) == 0) {
+            return false;   // a configured hold-modifier was released -> end
+        }
+    }
+    // All configured hold-modifiers still down (or none configured -> not
+    // modifier-gated, treat as held).
+    (void)anyModifier;
+    return true;
+}
+
+// #1: is `typed` bound to a template? (bit (c-'a') of the published key mask).
+// The LL hook calls this with an atomic snapshot of g_templateKeyMask, so it
+// never enumerates the g_templates vector on the hook thread.
+static bool IsTemplateKeyBound(unsigned long mask, wchar_t typed) {
+    wchar_t c = typed;
+    if (c >= L'A' && c <= L'Z') c = (wchar_t)(c - L'A' + L'a');
+    if (c < L'a' || c > L'z') return false;
+    return (mask & (1UL << (c - L'a'))) != 0;
+}
+
+static void LoadSettings() {
+    ShortcutConfig shortcut = {'N', {VK_CONTROL, 'F', 0, 0}, 2};
+    PCWSTR shortcutText = Wh_GetStringSetting(L"shortcut");
+    std::wstring shortcutLabel = (shortcutText && shortcutText[0]) ? shortcutText
+                                                                   : L"Ctrl+F+N";
+    if (!ParseShortcut(shortcutText, &shortcut)) {
+        Wh_Log(L"Invalid shortcut '%ls'; using Ctrl+F+N", shortcutText ? shortcutText : L"");
+        shortcutLabel = L"Ctrl+F+N";
+    }
+    Wh_FreeStringSetting(shortcutText);
+    g_shortcut = shortcut;
+    // #3: publish the packed snapshot the LL keyboard hook reads atomically.
+    InterlockedExchange64(&g_shortcutPacked, PackShortcut(shortcut));
 
     InterlockedExchange(&g_multiFolder,
                         Wh_GetIntSetting(L"multiFolder") != 0 ? 1 : 0);
@@ -344,20 +606,103 @@ static void LoadSettings() {
     }
     InterlockedExchange(&g_namingPattern, pattern);
 
+    // Folder-template collision mode (0=Skip, 1=Number, 2=Stop). Read as a
+    // string option like `trigger`; any unknown value maps to Skip (default).
+    PCWSTR tc = Wh_GetStringSetting(L"templateCollision");
+    LONG collision = TC_Skip;
+    if (tc) {
+        if (wcscmp(tc, L"number") == 0) {
+            collision = TC_Number;
+        } else if (wcscmp(tc, L"stop") == 0) {
+            collision = TC_Stop;
+        } else {
+            collision = TC_Skip;
+        }
+        Wh_FreeStringSetting(tc);
+    }
+
+    // Windhawk supports arrays of strings. Each entry uses
+    // Name=Folder 1|Folder 2|Folder 3, avoiding unsupported multi-key objects.
+    std::vector<FolderTemplate> raw;
+    for (int i = 0; i < 1000; ++i) {
+        PCWSTR value = Wh_GetStringSetting(L"folderTemplates[%d]", i);
+        if (!value || !value[0]) {
+            Wh_FreeStringSetting(value);
+            break;
+        }
+        std::wstring line(value);
+        Wh_FreeStringSetting(value);
+        // Format: key=Name=Folder1|Folder2. The user assigns the key; it is
+        // independent of the name. Malformed lines are ignored.
+        size_t firstEq = line.find(L'=');
+        if (firstEq == std::wstring::npos || firstEq == 0) continue;
+        size_t secondEq = line.find(L'=', firstEq + 1);
+        if (secondEq == std::wstring::npos) continue;
+        FolderTemplate t;
+        t.key = line.substr(0, firstEq);
+        t.name = line.substr(firstEq + 1, secondEq - firstEq - 1);
+        size_t start = secondEq + 1;
+        while (start <= line.size() &&
+               t.folders.size() < kMaxFoldersPerTemplate) {
+            size_t end = line.find(L'|', start);
+            std::wstring folder = line.substr(start, end - start);
+            if (!folder.empty()) t.folders.push_back(folder);
+            if (end == std::wstring::npos) break;
+            start = end + 1;
+        }
+        if (!t.folders.empty()) raw.push_back(std::move(t));
+    }
+
+    std::vector<std::wstring> ignored;
+    std::vector<ResolvedTemplate> resolved = ResolveTemplateKeys(raw, &ignored);
+
+    // #1: build the lock-free key mask the hook consults so ONLY a bound letter
+    // fires a template (an unbound letter falls through to one default folder).
+    LONG keyMask = 0;
+    for (const auto& r : resolved) {
+        wchar_t c = r.key;
+        if (c >= L'a' && c <= L'z') keyMask |= (1L << (c - L'a'));
+    }
+
+    // Publish under the lock so the hook/worker threads see a consistent
+    // (templates, collision) pair.
+    EnterCriticalSection(&g_templatesCs);
+    g_templates = std::move(resolved);
+    g_templateCollision = collision;
+    size_t usableCount = g_templates.size();
+    LeaveCriticalSection(&g_templatesCs);
+
+    // Publish a lock-free flag the keyboard hook can read: if ANY template is
+    // configured, the trigger must open the key-capture window (which listens
+    // for template letters) even when "Multiple folders in one go" is off.
+    // Without this, template keys never fire under the default settings.
+    InterlockedExchange(&g_hasTemplates, usableCount > 0 ? 1 : 0);
+    InterlockedExchange(&g_templateKeyMask, keyMask);
+
+    Wh_Log(L"Templates loaded: %zu usable, collision=%d",
+           usableCount, static_cast<int>(collision));
+    for (const auto& r : ignored) {
+        Wh_Log(L"%ls", r.c_str());
+    }
+
     // One concise summary per (re)load, so tuning any setting always produces a
     // single, greppable line from the mod itself -- instead of relying only on
     // Windhawk's verbose per-Wh_GetIntSetting engine trace.
-    Wh_Log(L"Settings applied: trigger=%d multiFolder=%d maxFolders=%d "
-           L"autoResolve=%d useDialog=%d openAfterCreate=%d typeSpeed=%d "
-           L"namingPattern=%d",
-           static_cast<int>(AtomicGet(&g_triggerMode)),
+    Wh_Log(L"Settings applied: shortcut='%ls' (triggerVk=%d heldKeys=%d) multiFolder=%d "
+           L"maxFolders=%d autoResolve=%d useDialog=%d openAfterCreate=%d typeSpeed=%d "
+           L"namingPattern=%d templateCollision=%d templates=%zu",
+           shortcutLabel.c_str(),
+           g_shortcut.triggerVk,
+           g_shortcut.heldCount,
            AtomicGet(&g_multiFolder) != 0 ? 1 : 0,
            static_cast<int>(AtomicGet(&g_maxFolders)),
            AtomicGet(&g_autoResolveNames) != 0 ? 1 : 0,
            AtomicGet(&g_useDialog) != 0 ? 1 : 0,
            AtomicGet(&g_openAfterCreate) != 0 ? 1 : 0,
            static_cast<int>(AtomicGet(&g_typeSpeed)),
-           static_cast<int>(AtomicGet(&g_namingPattern)));
+           static_cast<int>(AtomicGet(&g_namingPattern)),
+           static_cast<int>(collision),
+           usableCount);
 }
 
 // Type-speed timeout mappers. Mirror of CountWindowMsForSpeed /
@@ -677,6 +1022,267 @@ static std::vector<std::wstring> ResolveCaptureNames(const std::wstring& dir,
     return MakeNamedFolderNames(dir, base, count);
 }
 
+// ---- Folder Templates: pure logic (mirrors tests/capture_logic.h; pinned by
+// tests/template_keys_test.cpp + tests/template_folders_test.cpp) ----
+// The types, constants and g_templates state are declared ABOVE LoadSettings.
+// Adapted to the mod: existence via PathFileExistsW, numbering via the mod's
+// FormatBatchName(LONG pattern). The shortcut key is user-assigned per
+// template (the `key=` field), independent of the name. No templates are built in.
+
+// Case-fold for case-INSENSITIVE comparison (Windows dir names). Mirror of
+// tests/capture_logic.h ToLowerFold. #F3: "raw" and "RAW" are the same folder.
+static std::wstring ToLowerFold(const std::wstring& s) {
+    std::wstring r;
+    r.reserve(s.size());
+    for (wchar_t c : s) {
+        r.push_back(static_cast<wchar_t>(towlower(c)));
+    }
+    return r;
+}
+
+// First letter of the name, lowercased, or 0 if it is not an a-z letter.
+static wchar_t NormalizeTemplateKey(const std::wstring& rawName) {
+    size_t b = 0;
+    while (b < rawName.size() && iswspace(rawName[b])) {
+        ++b;
+    }
+    if (b >= rawName.size()) {
+        return 0;
+    }
+    wchar_t c = rawName[b];
+    if (c >= L'A' && c <= L'Z') {
+        c = static_cast<wchar_t>(c - L'A' + L'a');
+    }
+    if (c >= L'a' && c <= L'z') {
+        return c;
+    }
+    return 0;
+}
+
+// A template folder entry must be a plain leaf name (no path, no traversal, no
+// control chars). Mirrors tests/capture_logic.h::IsValidTemplateFolderName.
+static bool IsValidTemplateFolderName(const std::wstring& folder) {
+    if (folder.empty()) {
+        return false;
+    }
+    bool allSpace = true;
+    for (wchar_t c : folder) {
+        if (!iswspace(c)) {
+            allSpace = false;
+            break;
+        }
+    }
+    if (allSpace) {
+        return false;
+    }
+    for (wchar_t c : folder) {
+        if (c < 0x20) {
+            return false;
+        }
+        // #7: reject the SAME set a typed name strips (\ / : * ? " < > |), not
+        // just \ / : -- so a template can't smuggle a Windows-forbidden char.
+        if (IsForbiddenNameChar(c)) {
+            return false;
+        }
+    }
+    if (folder == L"." || folder == L"..") {
+        return false;
+    }
+    if (folder.size() >= 2 && folder[0] == L'.' && folder[1] == L'.') {
+        return false;
+    }
+    return true;
+}
+
+// Validate + dedup (first occurrence wins) + cap a template's folder list.
+static std::vector<std::wstring> CleanTemplateFolders(
+        const std::vector<std::wstring>& folders) {
+    std::vector<std::wstring> out;
+    for (const auto& f : folders) {
+        if (static_cast<int>(out.size()) >= kMaxFoldersPerTemplate) {
+            break;
+        }
+        if (!IsValidTemplateFolderName(f)) {
+            continue;
+        }
+        // #F3: dedup case-INSENSITIVELY -- raw|RAW name the same Windows
+        // folder, so keep only the first spelling.
+        std::wstring fold = ToLowerFold(f);
+        bool dup = false;
+        for (const auto& g : out) {
+            if (ToLowerFold(g) == fold) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        out.push_back(f);
+    }
+    return out;
+}
+
+// Load-time resolution: derive keys, first-in-list wins on a shared letter,
+// drop invalid, enforce the 26-template cap. Ignore reasons are appended to
+// `ignored` (logged by the caller). Mirrors ResolveTemplateKeys in the header.
+static std::vector<ResolvedTemplate> ResolveTemplateKeys(
+        const std::vector<FolderTemplate>& raw,
+        std::vector<std::wstring>* ignored) {
+    std::vector<ResolvedTemplate> usable;
+    for (const auto& t : raw) {
+        if (static_cast<int>(usable.size()) >= kMaxTemplates) {
+            if (ignored) {
+                ignored->push_back(L"Template '" + t.name +
+                                   L"' ignored (over 26-template cap)");
+            }
+            continue;
+        }
+        if (t.name.empty()) {
+            if (ignored) {
+                ignored->push_back(L"Template with blank name ignored");
+            }
+            continue;
+        }
+        wchar_t key = NormalizeTemplateKey(t.key);
+        if (key == 0) {
+            if (ignored) {
+                ignored->push_back(L"Template '" + t.name +
+                                   L"' ignored (key must be a single letter A-Z)");
+            }
+            continue;
+        }
+        bool claimed = false;
+        std::wstring owner;
+        for (const auto& u : usable) {
+            if (u.key == key) {
+                claimed = true;
+                owner = u.name;
+                break;
+            }
+        }
+        if (claimed) {
+            if (ignored) {
+                ignored->push_back(L"Template '" + t.name + L"' key '" +
+                                   std::wstring(1, key) +
+                                   L"' ignored (already used by '" + owner + L"')");
+            }
+            continue;
+        }
+        std::vector<std::wstring> folders = CleanTemplateFolders(t.folders);
+        if (folders.empty()) {
+            if (ignored) {
+                ignored->push_back(L"Template '" + t.name +
+                                   L"' ignored (no valid folder names)");
+            }
+            continue;
+        }
+        ResolvedTemplate rt;
+        rt.key = key;
+        rt.name = t.name;
+        rt.folders = folders;
+        usable.push_back(rt);
+    }
+    return usable;
+}
+
+// Fire-time: given a template's folders + collision mode + batch pattern,
+// return the concrete paths to create (empty for Stop when any already exists).
+// #6: first free numbered sibling of `leaf` (create-time race recovery for
+// Number mode); re-scans disk so it advances past whatever just appeared.
+// #8-1: also skips any path still RESERVED by other plans in this action, so a
+// retry never steals a name a later plan is going to create (which would force
+// that plan to renumber, e.g. [raw, "raw 3"] collapsing to "raw 3" / "raw 3 2").
+// `reserved` holds the folded paths this action still owns.
+// Mirror of tests/capture_logic.h NextFreeTemplateSibling.
+static std::wstring NextFreeTemplateSibling(const std::wstring& dir,
+                                            const std::wstring& leaf,
+                                            LONG pattern,
+                                            const std::vector<std::wstring>& reserved) {
+    for (int i = 2; i < 1000000; ++i) {
+        std::wstring candidate = JoinPath(dir, FormatBatchName(leaf, i, pattern));
+        if (PathFileExistsW(candidate.c_str())) {
+            continue;
+        }
+        std::wstring fold = ToLowerFold(candidate);
+        bool isReserved = false;
+        for (const auto& r : reserved) {
+            if (r == fold) { isReserved = true; break; }
+        }
+        if (!isReserved) {
+            return candidate;
+        }
+    }
+    return JoinPath(dir, leaf);
+}
+
+// One planned template folder: the ORIGINAL base name + the resolved path.
+// Mirror of tests/capture_logic.h TemplateFolderPlan. #1: carrying `base` lets
+// a create-time race retry number from the original name ("raw" -> "raw 3"),
+// not from an already-numbered candidate ("raw 2" -> "raw 2 2").
+struct TemplateFolderPlan {
+    std::wstring base;
+    std::wstring path;
+};
+
+// Mirrors ResolveTemplateFolders in the header, adapted to PathFileExistsW.
+static std::vector<TemplateFolderPlan> ResolveTemplateFolders(
+        const std::wstring& dir, const std::vector<std::wstring>& tmplFolders,
+        LONG pattern, LONG collision) {
+    std::vector<std::wstring> names = CleanTemplateFolders(tmplFolders);
+    std::vector<TemplateFolderPlan> out;
+
+    // #2: reserve every path chosen THIS action (case-insensitive: raw==RAW on
+    // Windows). A name is "taken" if it is on disk OR already reserved by an
+    // earlier entry this run -- stops [raw, "raw 2"] planning "raw 2" twice.
+    std::vector<std::wstring> planned;   // folded paths
+    auto taken = [&](const std::wstring& p) {
+        if (PathFileExistsW(p.c_str())) return true;
+        std::wstring fold = ToLowerFold(p);
+        for (const auto& q : planned) if (q == fold) return true;
+        return false;
+    };
+    // #1: each plan carries the ORIGINAL base name for correct race-retry.
+    auto reserve = [&](const std::wstring& base, const std::wstring& path) {
+        planned.push_back(ToLowerFold(path));
+        out.push_back(TemplateFolderPlan{ base, path });
+    };
+
+    if (collision == TC_Stop) {
+        for (const auto& n : names) {
+            if (PathFileExistsW(JoinPath(dir, n).c_str())) {
+                return {};
+            }
+        }
+        for (const auto& n : names) {
+            reserve(n, JoinPath(dir, n));
+        }
+        return out;
+    }
+
+    for (const auto& n : names) {
+        std::wstring path = JoinPath(dir, n);
+        if (!taken(path)) {
+            reserve(n, path);
+            continue;
+        }
+        if (collision == TC_Skip) {
+            continue;
+        }
+        // TC_Number: numbered sibling of the ORIGINAL base `n`; never overwrite
+        // and never collide with a path already planned this run.
+        for (int i = 2; i < 1000000; ++i) {
+            std::wstring candidate =
+                JoinPath(dir, FormatBatchName(n, i, pattern));
+            if (!taken(candidate)) {
+                reserve(n, candidate);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
 static std::wstring GetDesktopDir() {
     PWSTR p = nullptr;
 
@@ -924,14 +1530,20 @@ static void SendSimpleKey(WORD key) {
 }
 
 static void WaitForModifierKeysReleased() {
+    // #4: wait for the keys of the CONFIGURED shortcut (held keys + trigger)
+    // plus the standard modifiers -- not a fixed Ctrl/Alt/Shift/N/F set. For a
+    // shortcut like Alt+F2 the trigger F2 must be released too, or the injected
+    // F2 merges with the user's still-held F2.
+    std::vector<int> waitVks = ShortcutReleaseWaitVks(CurrentShortcut());
     for (int i = 0; i < 40; ++i) {
-        bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-        bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-        bool nDown = (GetAsyncKeyState('N') & 0x8000) != 0;
-        bool fDown = (GetAsyncKeyState('F') & 0x8000) != 0;
-
-        if (!ctrlDown && !altDown && !shiftDown && !nDown && !fDown) {
+        bool anyDown = false;
+        for (int vk : waitVks) {
+            if ((GetAsyncKeyState(vk) & 0x8000) != 0) {
+                anyDown = true;
+                break;
+            }
+        }
+        if (!anyDown) {
             return;
         }
 
@@ -1991,6 +2603,10 @@ struct PendingFolderAction {
                                 // real trigger-time capture (see
                                 // kSnapshotFreshWindowMs). A late resolve (worker
                                 // was busy) can't be trusted -> safe-cancel.
+    wchar_t templateKey = 0;    // Folder Templates: 0 = normal count action;
+                                // non-zero = template action keyed by this
+                                // lowercased letter (worker looks it up in
+                                // g_templates and ignores `requested`).
 };
 
 // Free a PendingFolderAction* carried in an lParam and clear the post-guard so a
@@ -2339,7 +2955,8 @@ static void PerformNewFolderAction(int requested, HWND origin,
                                    HWND capturedTab,
                                    const std::wstring& snapshotDir,
                                    bool snapshotExpected,
-                                   bool snapshotFresh) {
+                                   bool snapshotFresh,
+                                   wchar_t templateKey = 0) {
     if (InterlockedCompareExchange(&g_actionRunning, 1, 0) != 0) {
         return;
     }
@@ -2465,6 +3082,124 @@ static void PerformNewFolderAction(int requested, HWND origin,
     if (dirAttrs == INVALID_FILE_ATTRIBUTES ||
         !(dirAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
         Wh_Log(L"Unsupported target directory: %ls", dir.c_str());
+        SafeRelease(activeView);
+        InterlockedExchange(&g_actionRunning, 0);
+        return;
+    }
+
+    // ---- Folder Templates: a template letter fired instead of a count ----
+    // The hook stayed thin (it only captured the letter char); the lookup and
+    // creation happen HERE on the worker. `dir` above already passed the full
+    // origin/tab/snapshot drift guard, so a template gets the same protection
+    // as a normal batch. templateCollision governs collisions; autoResolveNames
+    // and openAfterCreate are intentionally IGNORED for templates. No rename UI,
+    // no auto-navigate.
+    if (templateKey != 0) {
+        std::vector<std::wstring> tmplFolders;
+        LONG collision = TC_Skip;
+        bool found = false;
+        EnterCriticalSection(&g_templatesCs);
+        for (const ResolvedTemplate& rt : g_templates) {
+            if (rt.key == templateKey) {
+                tmplFolders = rt.folders;
+                found = true;
+                break;
+            }
+        }
+        collision = g_templateCollision;
+        LeaveCriticalSection(&g_templatesCs);
+
+        if (!found) {
+            Wh_Log(L"No folder template bound to key '%c'; nothing created.",
+                   templateKey);
+            SafeRelease(activeView);
+            InterlockedExchange(&g_actionRunning, 0);
+            return;
+        }
+
+        // #2 (consistency): capture the numbering pattern ONCE for this whole
+        // template action so the initial plan AND every race retry use the same
+        // format -- a mid-action setting change can't split one action across
+        // two patterns.
+        const LONG tmplPattern = AtomicGet(&g_namingPattern);
+        std::vector<TemplateFolderPlan> tmplPlans = ResolveTemplateFolders(
+            dir, tmplFolders, tmplPattern, collision);
+        // #8-1: folded paths this action still owns, so a create-time race retry
+        // never steals a name reserved for another plan (which would force that
+        // plan to renumber and break the intended template set).
+        std::vector<std::wstring> tmplReserved;
+        tmplReserved.reserve(tmplPlans.size());
+        for (const TemplateFolderPlan& q : tmplPlans) {
+            tmplReserved.push_back(ToLowerFold(q.path));
+        }
+        int tmplCreated = 0;
+        for (const TemplateFolderPlan& plan : tmplPlans) {
+            const std::wstring& p = plan.path;
+            DWORD err = ERROR_SUCCESS;
+            bool created = CreateFolderDirect(p, &err);
+            if (!created && IsPermissionError(err)) {
+                created = CreateFolderWithShellElevation(p, target);
+            }
+            // #6: a lost check-then-create race is ERROR_ALREADY_EXISTS. In
+            // Number mode, advance to the next free numbered sibling (never
+            // overwrite), re-scanning the disk each try so it moves past
+            // whatever just appeared. In Skip/Stop mode an existing folder is
+            // left untouched, so a race just means "already there" -- no retry.
+            // #1: number from the ORIGINAL base (plan.base), so a race on
+            // "raw 2" retries as "raw 3", never "raw 2 2".
+            if (!created && ShouldRetryOnCollision(err) && collision == TC_Number) {
+                // #8-1: this plan's own path is no longer a constraint (it was
+                // raced away); every OTHER reserved plan path still is.
+                std::vector<std::wstring> otherReserved;
+                otherReserved.reserve(tmplReserved.size());
+                const std::wstring selfFold = ToLowerFold(plan.path);
+                for (const auto& r : tmplReserved) {
+                    if (r != selfFold) { otherReserved.push_back(r); }
+                }
+                int guard = 0;
+                while (!created && ShouldRetryOnCollision(err) && guard++ < 64) {
+                    std::wstring cand =
+                        NextFreeTemplateSibling(dir, plan.base, tmplPattern,
+                                                otherReserved);
+                    err = ERROR_SUCCESS;
+                    created = CreateFolderDirect(cand, &err);
+                    if (!created && IsPermissionError(err)) {
+                        created = CreateFolderWithShellElevation(cand, target);
+                    }
+                }
+            }
+            if (created) {
+                ++tmplCreated;
+            }
+        }
+        // Clear breakdown so a repeat press no longer reads as a bare "0 of 0".
+        // requested = names in the template; planned = names left after the
+        // collision policy (Skip drops existing ones); created = made on disk.
+        const int requested = static_cast<int>(tmplFolders.size());
+        const int planned   = static_cast<int>(tmplPlans.size());
+        const int skippedExisting = (requested > planned) ? (requested - planned) : 0;
+        const int failed = (planned > tmplCreated) ? (planned - tmplCreated) : 0;
+        const wchar_t* collisionName = (collision == TC_Number) ? L"number"
+                                     : (collision == TC_Stop)   ? L"stop"
+                                                                : L"skip";
+        if (collision == TC_Stop && tmplCreated == 0 && requested > 0) {
+            // #8-2: Stop cancels the WHOLE action as soon as ANY one folder
+            // already exists -- it does NOT mean all `requested` were present.
+            // planned=0 here, so don't mislead the log into "all N skipped as
+            // existing"; report the stop/cancel that actually happened.
+            Wh_Log(L"Folder template '%c': nothing created -- stopped/cancelled "
+                   L"because a folder already exists (collision=stop) in %ls.",
+                   templateKey, dir.c_str());
+        } else if (tmplCreated == 0 && skippedExisting == requested && requested > 0) {
+            Wh_Log(L"Folder template '%c': nothing created -- all %d folder(s) "
+                   L"already exist (duplicates skipped) in %ls.",
+                   templateKey, requested, dir.c_str());
+        } else {
+            Wh_Log(L"Folder template '%c': created %d of %d requested "
+                   L"(%d skipped as existing, %d failed, collision=%ls) in %ls.",
+                   templateKey, tmplCreated, requested,
+                   skippedExisting, failed, collisionName, dir.c_str());
+        }
         SafeRelease(activeView);
         InterlockedExchange(&g_actionRunning, 0);
         return;
@@ -2775,20 +3510,11 @@ static HHOOK g_lowLevelHook = nullptr;
 static volatile HANDLE g_workerThread = nullptr;
 static DWORD g_workerThreadId = 0;
 
-// Chord state -- only touched on the hook thread.
-static bool g_chordPending = false;
-static int g_chordPendingVk = 0;
-// #5 (chord snapshot): the trigger mode captured when a chord BEGINS. The
-// gesture must resolve with the mode that started it, even if the user changes
-// the trigger setting while the chord is pending. Hook-thread only.
-static LONG g_chordMode = 0;
-static ULONGLONG g_chordSinceMs = 0;
-static UINT_PTR g_chordTimer = 0;
+// Trigger key-up swallow flags -- only touched on the hook thread. Set when a
+// Ctrl+F+N gesture swallowed the F / N keydowns, so their matching key-ups are
+// also swallowed (they belonged to the gesture, not to Explorer).
 static bool g_swallowUpF = false;
 static bool g_swallowUpN = false;
-
-static const UINT_PTR kChordTimerId = 0xF0F0;
-static const UINT kChordTimeoutMs = 1200;
 
 // Count-entry state (multi-folder) -- only touched on the hook thread.
 static bool g_countActive = false;
@@ -2839,6 +3565,35 @@ static void PostFolderActionCount(int requested) {
     }
 }
 
+// Folder Templates: post a TEMPLATE action for the given lowercased letter key.
+// Mirrors PostFolderActionCount exactly (same g_actionPosted CAS, heap alloc,
+// trigger-context capture, and on-fail cleanup) but tags the action with a
+// templateKey so the worker looks the letter up in g_templates instead of
+// creating `requested` count folders. The hook NEVER reads g_templates -- it
+// only carries the char; the worker does the lookup.
+static void PostTemplateAction(wchar_t key) {
+    if (g_workerThreadId &&
+        InterlockedCompareExchange(&g_actionPosted, 1, 0) == 0) {
+        auto* action = new (std::nothrow) PendingFolderAction();
+        if (!action) {
+            InterlockedExchange(&g_actionPosted, 0);
+            return;
+        }
+        action->requested = 0;                       // count ignored for templates
+        action->templateKey = key;                   // template action key
+        action->origin = g_triggerTarget;
+        action->tab = g_triggerTab;
+        action->snapExpected = g_triggerSnapPosted;  // #2: carry post success
+        action->keypressTick = g_triggerTick;        // #2: carry keypress time
+        if (!PostThreadMessageW(
+                g_workerThreadId, WM_APP + 1, 0,
+                reinterpret_cast<LPARAM>(action))) {
+            delete action;
+            InterlockedExchange(&g_actionPosted, 0);
+        }
+    }
+}
+
 // Re-inject the Ctrl+F we swallowed so Explorer's search still opens. Injected
 // input carries LLKHF_INJECTED, so our own hook ignores it (no feedback loop).
 static void ReplayCtrlF() {
@@ -2875,49 +3630,6 @@ static void ReplayCtrlF() {
         // hardening only, nothing safe to retry here.
         Wh_Log(L"ReplayCtrlF: SendInput sent %u/%d events (error=%lu).",
                sent, n, GetLastError());
-    }
-}
-
-static void ResolveChordTimeout();  // fwd decl: chord-timer failure fallback
-
-static void StartChordTimer() {
-    g_chordTimer = SetTimer(nullptr, kChordTimerId, kChordTimeoutMs, nullptr);
-    // Hardening: if the timer could not be created the chord would otherwise
-    // stay pending forever (Ctrl+F stuck). There is no tick coming, so resolve
-    // the pending chord NOW -- same path the WM_TIMER would have taken (replay
-    // Ctrl+F / create). Log it so the rare failure is diagnosable.
-    if (g_chordTimer == 0) {
-        Wh_Log(L"StartChordTimer: SetTimer failed (error=%lu); resolving chord "
-               L"immediately so it can't stay pending", GetLastError());
-        ResolveChordTimeout();
-    }
-}
-
-static void StopChordTimer() {
-    if (g_chordTimer) {
-        KillTimer(nullptr, g_chordTimer);
-        g_chordTimer = 0;
-    }
-}
-
-static void ResolveChordTimeout() {
-    StopChordTimer();
-
-    if (!g_chordPending) {
-        return;
-    }
-
-    bool wasF = (g_chordPendingVk == 'F');
-    // #5: resolve with the mode captured when the chord began, not the current
-    // (possibly just-changed) setting.
-    LONG mode = g_chordMode;
-
-    g_chordPending = false;
-    g_chordPendingVk = 0;
-
-    // Only Ctrl+F+N swallowed a real Ctrl+F (search) that it now owes back.
-    if (mode == 0 && wasF) {
-        ReplayCtrlF();
     }
 }
 
@@ -3017,7 +3729,12 @@ static void TriggerFired() {
                                reinterpret_cast<LPARAM>(g_triggerTab)) != FALSE;
     }
 
-    if (AtomicGet(&g_multiFolder)) {  // atomic read, like every other settings load
+    // Open the key-capture window when EITHER multi-folder is on OR at least
+    // one template is configured. The capture window is the ONLY place a
+    // template letter is caught, so gating it on multi-folder alone made
+    // templates dead under the default settings (the "templates don't work"
+    // bug). Mirrors ShouldOpenCaptureWindow in tests/newfolder_logic.h.
+    if (AtomicGet(&g_multiFolder) || AtomicGet(&g_hasTemplates)) {
         BeginCountCapture();
     } else {
         PostFolderActionCount(1);
@@ -3241,8 +3958,9 @@ static DWORD WINAPI WorkerThread(void* pParameter) {
                     g_actionRunning != 0 || origin == nullptr) {
                     continue;  // action freed by unique_ptr
                 }
+                wchar_t templateKey = action ? action->templateKey : 0;
                 PerformNewFolderAction(requested, origin, tab, snapDir,
-                                       snapExpected, snapFresh);
+                                       snapExpected, snapFresh, templateKey);
                 continue;
             }
         }
@@ -3290,17 +4008,7 @@ static DWORD WINAPI HookThread(void* pParameter) {
                 continue;
             }
 
-            // SetTimer(NULL,...) IGNORES the id we pass and returns a fresh
-            // system id (stored in g_chordTimer); the WM_TIMER wParam carries
-            // THAT id, not our constant -- match the stored handle or the
-            // timeout never resolves and the chord state gets stuck.
-            if (msg.message == WM_TIMER && g_chordTimer &&
-                msg.wParam == g_chordTimer) {
-                ResolveChordTimeout();
-                continue;
-            }
-
-            // Same as above: match the SetTimer-returned handle, not the
+            // Match the SetTimer-returned handle, not the
             // ignored constant kCountTimerId. Without this the count-entry
             // window never auto-commits, so a bare trigger creates nothing and
             // g_countActive stays stuck (the next keystroke then leaks to
@@ -3357,7 +4065,6 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
     const bool isKeyUp =
         (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
     const int vk = static_cast<int>(info->vkCode);
-    const LONG mode = AtomicGet(&g_triggerMode);   // #5: atomic settings read
 
     // Swallow the key-up of a key whose key-down we swallowed (no stray char).
     if (isKeyUp) {
@@ -3370,14 +4077,17 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
             return 1;
         }
 
-        // Hold-Ctrl-throughout: the instant Ctrl is released, finish count
-        // entry NOW -- commit typed digits, or the default single folder when
-        // none were typed. This is the responsive path (no 1200 ms count-timer
-        // wait) and it clears g_countActive so the next gesture starts clean
-        // instead of leaking the key into Explorer (search / Ctrl+N window).
-        if (g_countActive &&
-            (vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL) &&
-            (GetAsyncKeyState(VK_CONTROL) & 0x8000) == 0) {
+        // Hold-modifier-throughout: the instant the gesture's hold-modifier is
+        // released, finish count entry NOW -- commit typed digits, or the
+        // default single folder when none were typed. This is the responsive
+        // path (no 1200 ms count-timer wait) and it clears g_countActive so the
+        // next gesture starts clean instead of leaking the key into Explorer.
+        // #8-2: the modifier is whatever the CONFIGURED shortcut holds (Ctrl for
+        // Ctrl+F+N, Alt for Alt+F2, Win for Win+N) -- not hard-coded Ctrl. We
+        // react when a hold-modifier key goes up AND no gesture modifier remains
+        // down.
+        if (g_countActive && IsHoldModifierVk(vk) &&
+            !IsGestureModifierHeldNow(CurrentShortcut())) {
             CommitCountCapture();
         }
 
@@ -3404,14 +4114,18 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
             return CallNextHookEx(g_lowLevelHook, nCode, wParam, lParam);
         }
 
-        // Ctrl-held-throughout: the count window only lives while Ctrl stays
-        // down. The moment Ctrl is released, FINISH entry -- commit the digits
-        // typed so far, or the default single folder when none were typed
-        // (CommitCountCapture maps "no digits" -> 1). Only Esc cancels (create
-        // nothing). Mirrors CountDecide(ctrlHeld=false). NOTE: the primary
-        // release path is the key-up handler above; this keydown fallback
-        // covers a key that arrives after Ctrl was already let go.
-        const bool ctrlStillHeld = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        // Modifier-held-throughout: the count window only lives while the
+        // gesture's hold-modifier stays down. The moment it is released, FINISH
+        // entry -- commit the digits typed so far, or the default single folder
+        // when none were typed (CommitCountCapture maps "no digits" -> 1). Only
+        // Esc cancels (create nothing). Mirrors CountDecide(modifierHeld=false).
+        // #8-2: the modifier is whatever the CONFIGURED shortcut holds (Ctrl,
+        // Alt, Win, ...), not hard-coded Ctrl -- so Alt+F2 / Win+N can capture a
+        // batch count or a template letter instead of committing immediately.
+        // NOTE: the primary release path is the key-up handler above; this
+        // keydown fallback covers a key that arrives after the modifier was let
+        // go.
+        const bool ctrlStillHeld = IsGestureModifierHeldNow(CurrentShortcut());
         if (!ctrlStillHeld) {
             // A DIGIT is explicit intent: the low-level hook can deliver the
             // FIRST count digit's keydown after GetAsyncKeyState(VK_CONTROL)
@@ -3484,6 +4198,28 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
             return 1;  // swallow Esc
         }
 
+        // Folder Templates: a LETTER while the count window is active routes to
+        // a template action instead of a count. Thin hook -- capture the
+        // lowercased char and post; the worker does the g_templates lookup. The
+        // typed count (if any) is DISCARDED: cancel the count window with
+        // EndCountCapture (create nothing), not CommitCountCapture.
+        if (vk >= 'A' && vk <= 'Z') {
+            wchar_t key = static_cast<wchar_t>(vk - 'A' + L'a');
+            // #1: only a letter BOUND to a template fires a template. An
+            // unbound letter must NOT post a template the worker can't resolve
+            // (which created nothing) -- it falls through to the single-folder
+            // commit below. The hook reads a lock-free key mask, never the
+            // g_templates vector.
+            if (IsTemplateKeyBound(
+                    (unsigned long)AtomicGet(&g_templateKeyMask), key)) {
+                Wh_Log(L"Template letter '%c' pressed; posting template action", key);
+                PostTemplateAction(key);
+                EndCountCapture();  // cancel the count window WITHOUT creating count folders
+                return 1;           // swallow the letter
+            }
+            // Unbound letter: fall through to CommitCountCapture (single folder).
+        }
+
         // Any other key WHILE CTRL IS STILL HELD (the Ctrl-release paths above
         // already returned): commit what we have (or one) and SWALLOW it.
         // Letting it through would reach Explorer as a Ctrl+<key> shortcut --
@@ -3495,88 +4231,25 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
         return 1;
     }
 
-    const bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-    const bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    const bool cleanCtrl = ctrl && !alt && !shift;
     const bool fg = IsExplorerForegroundForHotkey();
 
-    // ---- Complete or abandon a pending chord ----
-    if (g_chordPending) {
-        bool expired = (GetTickCount64() - g_chordSinceMs) > kChordTimeoutMs;
-
-        if (!expired && ctrl) {
-            if (mode == 0 && g_chordPendingVk == 'F' && vk == 'N') {
-                StopChordTimer();
-                g_chordPending = false;
-                g_chordPendingVk = 0;
-                g_swallowUpN = true;
-                TriggerFired();
-                return 1;
-            }
-
-            if (mode == 2 && g_chordPendingVk == 'N' && vk == 'F') {
-                StopChordTimer();
-                g_chordPending = false;
-                g_chordPendingVk = 0;
-                g_swallowUpF = true;
-                TriggerFired();
-                return 1;
-            }
-
-            // Auto-repeat of the first chord key: keep swallowing, stay pending.
-            if (vk == g_chordPendingVk) {
-                return 1;
+    // Fire when the configured final key is pressed while every preceding key
+    // remains held. This supports user-entered shortcuts such as Ctrl+Shift+N,
+    // Alt+F2, Win+N, and the default Ctrl+F+N without preset choices.
+    // #3: read the shortcut as ONE atomic snapshot (never the tearable struct).
+    const ShortcutConfig sc = CurrentShortcut();
+    if (fg && vk == sc.triggerVk) {
+        bool allHeld = true;
+        for (int i = 0; i < sc.heldCount; ++i) {
+            if ((GetAsyncKeyState(sc.heldVks[i]) & 0x8000) == 0) {
+                allHeld = false;
+                break;
             }
         }
-
-        // Chord broken or expired: abandon (replay Ctrl+F only for Ctrl+F+N),
-        // then let the current key be evaluated as a fresh trigger below.
-        bool wasF = (g_chordPendingVk == 'F');
-        StopChordTimer();
-        g_chordPending = false;
-        g_chordPendingVk = 0;
-        if (mode == 0 && wasF) {
-            ReplayCtrlF();
-        }
-    }
-
-    // ---- Mode 3 (Ctrl+Shift+N): single-press, fires immediately ----
-    // This is the shortcut Windows itself binds to "New folder", so we simply
-    // take it over to add naming + batch. It needs Ctrl AND Shift (Alt clear) --
-    // a DIFFERENT modifier gate than cleanCtrl -- so it is handled before the
-    // cleanCtrl block below. Nothing to replay: we enhance the native gesture.
-    if (mode == 3 && vk == 'N' && ctrl && shift && !alt && fg) {
-        g_swallowUpN = true;
-        TriggerFired();
-        return 1;
-    }
-
-    // ---- Not pending: react to the first trigger key for this mode ----
-    if (cleanCtrl && fg) {
-        if (mode == 1 && vk == 'N') {                 // Ctrl+N -> create now
-            g_swallowUpN = true;
+        if (allHeld) {
+            if (vk == 'F') g_swallowUpF = true;
+            if (vk == 'N') g_swallowUpN = true;
             TriggerFired();
-            return 1;
-        }
-
-        if (mode == 0 && vk == 'F') {                 // Ctrl+F+N -> start on F
-            g_chordPending = true;
-            g_chordPendingVk = 'F';
-            g_chordMode = mode;                       // #5: snapshot at begin
-            g_chordSinceMs = GetTickCount64();
-            g_swallowUpF = true;
-            StartChordTimer();
-            return 1;
-        }
-
-        if (mode == 2 && vk == 'N') {                 // Ctrl+N+F -> start on N
-            g_chordPending = true;
-            g_chordPendingVk = 'N';
-            g_chordMode = mode;                       // #5: snapshot at begin
-            g_chordSinceMs = GetTickCount64();
-            g_swallowUpN = true;
-            StartChordTimer();
             return 1;
         }
     }
@@ -3588,7 +4261,11 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
 BOOL WhTool_ModInit() {
     // Startup diagnostic. The version here MUST match the @version metadata
     // above (enforced by scripts\check_version_init.ps1).
-    Wh_Log(L"INIT: v0.9.0 explorer-ctrlfn-newfolder loaded");
+    Wh_Log(L"INIT: v0.10.0 explorer-ctrlfn-newfolder loaded");
+    // Guard g_templates/g_templateCollision. Created BEFORE the first
+    // LoadSettings() call (which publishes into them) and before the hook
+    // starts, so no thread ever touches the CS uninitialised.
+    InitializeCriticalSection(&g_templatesCs);
     LoadSettings();
     return KeybdHook_Init();
 }
@@ -3601,6 +4278,9 @@ void WhTool_ModUninit() {
         DeleteObject(g_uiFont);
         g_uiFont = nullptr;
     }
+    // Destroyed AFTER the hook/worker have stopped (KeybdHook_Exit above), so
+    // no thread can still be inside the CS when it is deleted.
+    DeleteCriticalSection(&g_templatesCs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

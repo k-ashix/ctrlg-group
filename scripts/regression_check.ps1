@@ -106,10 +106,14 @@ AssertPresent "ignores its own injected input"               'LLKHF_INJECTED'
 AssertPresent "installs a low-level keyboard hook"           'WH_KEYBOARD_LL'
 AssertPresent "Ctrl+F search-preserving replay path"         'ReplayCtrlF'
 
-# All three configurable trigger options must exist.
-AssertPresent "trigger option ctrl_f_n"                      'ctrl_f_n'
-AssertPresent "trigger option ctrl_n_f"                      'ctrl_n_f'
-AssertPresent "trigger option ctrl_n"                        'ctrl_n:'
+# Settings metadata must use Windhawk's one-key-per-list-item schema.
+AssertPresent "custom shortcut string setting"               '(?m)^- shortcut: "Ctrl\+F\+N"\r?$'
+AssertPresent "custom shortcut is read from settings"        'Wh_GetStringSetting\(L"shortcut"\)'
+AssertPresent "custom shortcut parser present"               'ParseShortcut'
+AssertAbsent  "legacy forced trigger choices are gone"       '(?m)^- trigger:'
+AssertAbsent  "invalid multi-key template object is gone"    '(?ms)^- folderTemplates:\s*\r?\n\s+- name:.*?\r?\n\s+folders:'
+AssertPresent "template key parsed independently of name"    'key=Name=Folder'
+AssertPresent "template line split on two = signs"           'line\.find\(L''=''\, firstEq \+ 1\)'
 
 # Multi-folder creation (v0.2.0) must stay wired up.
 AssertPresent "multi-folder toggle setting"                 'multiFolder'
@@ -121,11 +125,12 @@ AssertPresent "count-entry capture state"                    'g_countActive'
 AssertPresent "count-entry commit path"                      'CommitCountCapture'
 AssertPresent "auto-resolve-names toggle setting"            'autoResolveNames'
 
-# v0.2.2 -- chord/count timeouts must match the SetTimer-RETURNED handle, not
-# the constant id that SetTimer(NULL, ...) silently ignores. If this regresses,
-# the count-entry window never auto-commits and the trigger gets stuck: it does
+# v0.2.2 -- the count timeout must match the SetTimer-RETURNED handle, not the
+# constant id that SetTimer(NULL, ...) silently ignores. If this regresses, the
+# count-entry window never auto-commits and the trigger gets stuck: it does
 # nothing the first time and leaks the key into Explorer the second time.
-AssertPresent "chord timeout matches stored timer id"       'msg\.wParam == g_chordTimer'
+# (The old dead chord-timer machinery was removed in wh(8); only the live
+# count-entry timer remains.)
 AssertPresent "count timeout matches stored timer id"       'msg\.wParam == g_countTimer'
 
 # The mod must NOT regress back to the file-creating reference behaviour.

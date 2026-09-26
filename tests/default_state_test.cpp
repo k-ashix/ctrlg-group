@@ -1,8 +1,8 @@
 // default_state_test.cpp
 // Verifies the shipped DEFAULT of the "Multiple folders in one go" toggle.
-// The classic single-folder behaviour is the least-surprising default, so the
-// multi-folder feature must ship OFF (opt-in). This pins the default so a future
-// edit can't silently flip it back on.
+// It ships ON so batch counts and folder templates work out of the box (a
+// template key is only captured while the count window is open). This pins the
+// default so a future edit can't silently flip it back off.
 // Self-contained: own main(), exit 0 = pass.
 
 #include "newfolder_logic.h"
@@ -26,16 +26,16 @@ static void expectInt(int got, int want, const char* what) {
 }
 
 int main() {
-    // 1. The toggle ships OFF by default.
-    expectTrue(kMultiFolderDefaultOn == false,
-               "multi-folder toggle default must be OFF (opt-in)");
+    // 1. The toggle ships ON by default (batch + templates work out of the box).
+    expectTrue(kMultiFolderDefaultOn == true,
+               "multi-folder toggle default must be ON");
 
-    // 2. With the default (off), even a requested count collapses to a single
-    //    folder -- the classic behaviour a first-time user expects.
-    expectInt(ResolveFolderCount(5, kMultiFolderDefaultOn, 25), 1,
-              "default (off): a typed count still makes exactly 1 folder");
+    // 2. With the default (on), a typed count creates that many folders...
+    expectInt(ResolveFolderCount(5, kMultiFolderDefaultOn, 25), 5,
+              "default (on): a typed count of 5 makes 5 folders");
+    // ...and no digits still means the classic single folder.
     expectInt(ResolveFolderCount(0, kMultiFolderDefaultOn, 25), 1,
-              "default (off): no digits -> 1 folder");
+              "default (on): no digits -> 1 folder");
 
     if (g_fail == 0) {
         printf("default_state_test: PASS\n");

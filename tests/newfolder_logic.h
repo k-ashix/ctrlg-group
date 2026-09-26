@@ -18,11 +18,159 @@
 #include <string>
 #include <functional>
 #include <cwchar>
+#include <vector>
 
 // Virtual-key constants (avoid pulling in <windows.h> for the g++ test build).
 static const int kVkF = 'F';
 static const int kVkN = 'N';
 static const int kVkControl = 0x11;  // VK_CONTROL
+static const int kVkShift   = 0x10;  // VK_SHIFT
+static const int kVkAlt     = 0x12;  // VK_MENU (Alt)
+static const int kVkLWin    = 0x5B;  // VK_LWIN
+static const int kVkRWin    = 0x5C;  // VK_RWIN
+
+// True if `vk` is a modifier key that can be HELD to keep a gesture alive
+// (Ctrl / Shift / Alt / Win). Used to pick which key the count/template capture
+// window must watch -- NOT always Ctrl. Left/right specific codes fold onto the
+// generic modifier so a configured shortcut's held keys are recognised.
+inline bool IsHoldModifierVk(int vk) {
+    return vk == kVkControl || vk == 0xA2 || vk == 0xA3 ||   // Ctrl, L/R Ctrl
+           vk == kVkShift   || vk == 0xA0 || vk == 0xA1 ||   // Shift, L/R Shift
+           vk == kVkAlt     || vk == 0xA4 || vk == 0xA5 ||   // Alt,   L/R Alt
+           vk == kVkLWin    || vk == kVkRWin;                // Win
+}
+
+// ---------------------------------------------------------------------------
+// #3  Atomic shortcut snapshot.
+//
+// The configurable shortcut (ShortcutConfig) is READ on the low-level keyboard
+// hook thread while LoadSettings WRITES it on the settings thread. A plain
+// multi-field struct assignment is not atomic, so the hook can observe a torn
+// half-updated shortcut. Packing the config into ONE 64-bit word lets the mod
+// publish it with a single InterlockedExchange64 and read it with a single
+// atomic load -- no torn read, and the LL hook stays lock-free.
+//
+// Layout (little end):
+//   bits  0-7   triggerVk       (0-255)
+//   bits  8-10  heldCount       (0-4)
+//   bits 16-23  heldVks[0]
+//   bits 24-31  heldVks[1]
+//   bits 32-39  heldVks[2]
+//   bits 40-47  heldVks[3]
+struct ShortcutSnapshot {
+    int triggerVk = 0;
+    int heldVks[4] = {0, 0, 0, 0};
+    int heldCount = 0;
+};
+
+inline long long PackShortcut(int triggerVk, const int* heldVks, int heldCount) {
+    if (heldCount < 0) heldCount = 0;
+    if (heldCount > 4) heldCount = 4;
+    unsigned long long p = 0;
+    p |= static_cast<unsigned long long>(triggerVk & 0xFF);
+    p |= static_cast<unsigned long long>(heldCount & 0x7) << 8;
+    for (int i = 0; i < 4; ++i) {
+        int vk = (heldVks && i < heldCount) ? (heldVks[i] & 0xFF) : 0;
+        p |= static_cast<unsigned long long>(vk) << (16 + i * 8);
+    }
+    return static_cast<long long>(p);
+}
+
+inline ShortcutSnapshot UnpackShortcut(long long packed) {
+    unsigned long long p = static_cast<unsigned long long>(packed);
+    ShortcutSnapshot s;
+    s.triggerVk = static_cast<int>(p & 0xFF);
+    s.heldCount = static_cast<int>((p >> 8) & 0x7);
+    if (s.heldCount > 4) s.heldCount = 4;
+    for (int i = 0; i < 4; ++i) {
+        s.heldVks[i] = static_cast<int>((p >> (16 + i * 8)) & 0xFF);
+    }
+    return s;
+}
+
+// ---------------------------------------------------------------------------
+// #4  Release-wait key set for the F2-rename fallback.
+//
+// Before injecting F2 (the rename accelerator) the mod waits for the gesture
+// keys to be physically released, so the injected F2 is not combined with a
+// still-held modifier. The old wait watched a FIXED set (Ctrl/Alt/Shift/N/F).
+// Once the shortcut became user-configurable that set was wrong: e.g. for
+// Alt+F2 the trigger key F2 itself was never waited for, so the injected F2
+// could merge with the user's still-down F2.
+//
+// The correct wait set is the three standard modifiers PLUS every key in the
+// configured shortcut (held keys + trigger), de-duplicated.
+inline std::vector<int> ShortcutReleaseWaitVks(int triggerVk,
+                                               const int* heldVks,
+                                               int heldCount) {
+    std::vector<int> out = { kVkControl, kVkAlt, kVkShift };
+    auto add = [&out](int vk) {
+        if (vk == 0) return;
+        for (int e : out) {
+            if (e == vk) return;
+        }
+        out.push_back(vk);
+    };
+    if (heldCount > 4) heldCount = 4;
+    for (int i = 0; i < heldCount; ++i) {
+        if (heldVks) add(heldVks[i]);
+    }
+    add(triggerVk);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// #8-2  Which modifier keeps the count/template capture window alive.
+//
+// After a trigger fires, the count/template capture window stays open only
+// while the gesture's HOLD MODIFIER remains physically down. The old code
+// hard-coded that modifier to Ctrl (GetAsyncKeyState(VK_CONTROL)), so a
+// non-Ctrl shortcut (Alt+F2, Win+N) reported "released" on the very first
+// follow-up key and committed the default single folder -- batch counts and
+// template letters were unreachable.
+//
+// The correct hold-modifier set is every MODIFIER key in the configured
+// shortcut's held keys (Ctrl for Ctrl+F+N, Alt for Alt+F2, Win for Win+N).
+// keyDown(vk) reports whether a key is currently physically down (the mod wraps
+// GetAsyncKeyState). The window stays alive while ANY of those modifiers is
+// held. A shortcut with NO held modifier (e.g. a bare F-key trigger) has no key
+// to hold, so capture is treated as always-held for its duration (it ends by
+// Enter / Escape / timeout instead).
+inline std::vector<int> GestureHoldModifierVks(const int* heldVks,
+                                               int heldCount) {
+    std::vector<int> out;
+    if (heldCount > 4) heldCount = 4;
+    for (int i = 0; i < heldCount; ++i) {
+        int vk = heldVks ? heldVks[i] : 0;
+        if (IsHoldModifierVk(vk)) {
+            bool dup = false;
+            for (int e : out) { if (e == vk) { dup = true; break; } }
+            if (!dup) out.push_back(vk);
+        }
+    }
+    return out;
+}
+
+// True if the capture window should stay open: EVERY configured hold-modifier
+// is still down. The gesture spec is "all preceding keys remain held", so for
+// Ctrl+Shift+N both Ctrl AND Shift must stay down -- releasing EITHER ends the
+// window. (An OR check here was a bug: it kept the window alive when only one
+// of several modifiers was still held.) With no hold-modifier configured,
+// returns true (the window is not modifier-gated; it ends by Enter / Escape /
+// timeout).
+inline bool IsGestureModifierHeld(const int* heldVks, int heldCount,
+                                  const std::function<bool(int)>& keyDown) {
+    std::vector<int> mods = GestureHoldModifierVks(heldVks, heldCount);
+    if (mods.empty()) {
+        return true;   // no modifier to hold -> window not modifier-gated
+    }
+    for (int vk : mods) {
+        if (!keyDown || !keyDown(vk)) {
+            return false;   // this configured modifier was released -> end
+        }
+    }
+    return true;   // all configured hold-modifiers still down
+}
 
 // Chord window: max gap between the two chord keys (and the replay timeout).
 static const unsigned long long kChordTimeoutMs = 1200;
@@ -257,10 +405,10 @@ inline TriggerResult TriggerDecide(TriggerMode mode,
 static const int kFolderDefaultMax = 25;
 static const int kFolderHardCap    = 100;
 
-// Default state of the "Multiple folders in one go" toggle. The classic,
-// least-surprising behaviour is a single folder per trigger, so multi-folder
-// ships OFF by default and is opt-in.
-static const bool kMultiFolderDefaultOn = false;
+// Default state of the "Multiple folders in one go" toggle. It ships ON so
+// batch counts and folder templates work out of the box (a template key is only
+// captured while the count window is open, which the toggle controls).
+static const bool kMultiFolderDefaultOn = true;
 
 // Clamp the user's maxFolders setting into the allowed [1, kFolderHardCap] range.
 inline int ClampFolderMax(int maxSetting) {
@@ -271,6 +419,43 @@ inline int ClampFolderMax(int maxSetting) {
         return kFolderHardCap;
     }
     return maxSetting;
+}
+
+// Decide whether a trigger opens the key-capture window (which listens for
+// count digits AND template letters) or goes straight to a single folder.
+//
+// BUG FIX: templates were unreachable when "Multiple folders in one go" was OFF,
+// because the capture window -- the ONLY place a template letter is caught --
+// only opened when multiEnabled was true. The window must open when EITHER
+// multi-folder is on OR at least one template is configured, so a chosen
+// template key always works regardless of the multi-folder toggle.
+inline bool ShouldOpenCaptureWindow(bool multiEnabled, bool hasTemplates) {
+    return multiEnabled || hasTemplates;
+}
+
+// Breakdown of a template run for clear logging. `requested` is how many folder
+// names the template lists; `planned` is how many survived the collision policy
+// (Skip drops names that already exist, so planned < requested); `created` is
+// how many were actually made on disk. From those:
+//   skippedExisting = requested - planned  (dropped because they already exist)
+//   failed          = planned  - created   (a create call failed, e.g. denied)
+struct TemplateRunSummary {
+    int requested = 0;
+    int planned = 0;
+    int created = 0;
+    int skippedExisting = 0;
+    int failed = 0;
+};
+
+inline TemplateRunSummary SummarizeTemplateRun(int requested, int planned,
+                                               int created) {
+    TemplateRunSummary s;
+    s.requested = requested;
+    s.planned = planned;
+    s.created = created;
+    s.skippedExisting = (requested > planned) ? (requested - planned) : 0;
+    s.failed = (planned > created) ? (planned - created) : 0;
+    return s;
 }
 
 // Resolve how many folders to create for one trigger:
