@@ -1,0 +1,634 @@
+// newfolder_logic.h
+//
+// PURE logic mirrored from explorer-ctrlfn-newfolder.wh.cpp so it can be unit
+// tested with a plain g++ build (no Win32 runtime required). The mod is a
+// Windhawk translation unit with no standalone main() and Windhawk/Win32
+// headers, so it cannot be compiled here directly -- each pure decision is
+// mirrored into this header and exercised by tests\*_test.cpp.
+//
+// Two decisions live here:
+//   1. MakeUniqueFolderName  -- "New folder", "New folder (2)", ... numbering
+//   2. TriggerDecide         -- the Ctrl+F+N / Ctrl+N / Ctrl+N+F state machine
+//
+// >>> RED STUB <<< : the bodies below are intentionally unimplemented so the
+// tests fail first. They are filled in during the GREEN step.
+
+#pragma once
+
+#include <string>
+#include <functional>
+#include <cwchar>
+
+// Virtual-key constants (avoid pulling in <windows.h> for the g++ test build).
+static const int kVkF = 'F';
+static const int kVkN = 'N';
+static const int kVkControl = 0x11;  // VK_CONTROL
+
+// Chord window: max gap between the two chord keys (and the replay timeout).
+static const unsigned long long kChordTimeoutMs = 1200;
+
+// ---------------------------------------------------------------------------
+// Pure path join (mirror of the mod's JoinPath).
+// ---------------------------------------------------------------------------
+inline std::wstring JoinPath(const std::wstring& a, const std::wstring& b) {
+    if (a.empty()) {
+        return b;
+    }
+
+    wchar_t back = a[a.size() - 1];
+    if (back == L'\\' || back == L'/') {
+        return a + b;
+    }
+
+    return a + L'\\' + b;
+}
+
+// ---------------------------------------------------------------------------
+// Create-collision decision (mirror of the folder-create loop in the mod).
+// #5: a check-then-create (PathFileExistsW then CreateDirectoryW) is not
+// atomic -- another process can create the same directory in between, so
+// CreateDirectoryW fails with ERROR_ALREADY_EXISTS. That is NOT a real failure:
+// the create loop should treat it as a collision and advance to the next
+// candidate name. Every other error is a genuine failure. ERROR_ALREADY_EXISTS
+// is 183 on Windows; define it locally so this header needs no <windows.h>.
+#ifndef ERROR_ALREADY_EXISTS
+#define ERROR_ALREADY_EXISTS 183
+#endif
+inline bool ShouldRetryOnCollision(unsigned long createError) {
+    return createError == ERROR_ALREADY_EXISTS;
+}
+
+// ---------------------------------------------------------------------------
+// Unique folder-name generator.
+// exists(fullPath) -> true if a file/folder already exists at that path.
+// Returns the first free path: "<dir>\New folder", then "New folder (2)", ...
+// ---------------------------------------------------------------------------
+using NameExists = std::function<bool(const std::wstring&)>;
+
+inline std::wstring MakeUniqueFolderName(const std::wstring& dir,
+                                         const NameExists& exists) {
+    std::wstring base = JoinPath(dir, L"New folder");
+    if (!exists(base)) {
+        return base;
+    }
+
+    for (int i = 2; i < 10000; ++i) {
+        wchar_t buf[64] = {0};
+        std::swprintf(buf, 64, L"New folder (%d)", i);
+
+        std::wstring candidate = JoinPath(dir, buf);
+        if (!exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return base;
+}
+
+// ---------------------------------------------------------------------------
+// Trigger / chord state machine.
+// ---------------------------------------------------------------------------
+enum class TriggerMode {
+    CtrlFN     = 0,  // hold Ctrl, tap F, tap N        (default; preserves search)
+    CtrlN      = 1,  // Ctrl+N                         (swallows new-window)
+    CtrlNF     = 2,  // hold Ctrl, tap N, tap F        (swallows new-window)
+    CtrlShiftN = 3,  // Ctrl+Shift+N                   (overlays native New folder)
+};
+
+enum class TriggerAction {
+    None = 0,
+    CreateFolder = 1,
+    ReplayCtrlF = 2,  // re-inject Ctrl+F so Explorer search still works
+};
+
+struct TriggerState {
+    bool pending = false;                    // waiting for the 2nd chord key
+    int pendingVk = 0;                       // key swallowed while pending (F or N)
+    unsigned long long pendingSinceMs = 0;   // when pending began
+    int swallowUpVk = 0;                     // vk whose next keyup must be swallowed
+};
+
+struct KeyEvent {
+    int vk = 0;                     // 'F', 'N', kVkControl, ...
+    bool isDown = true;             // keydown vs keyup
+    bool isTimeout = false;         // synthetic chord-timeout tick
+    bool ctrlDown = false;          // modifier snapshot at event time
+    bool altDown = false;
+    bool shiftDown = false;
+    bool explorerForeground = false;
+    bool injected = false;          // event was synthesized by us
+    unsigned long long nowMs = 0;
+};
+
+struct TriggerResult {
+    bool swallow = false;                        // true => hook returns 1 (suppress)
+    TriggerAction action = TriggerAction::None;
+    TriggerState next;
+};
+
+inline TriggerResult TriggerDecide(TriggerMode mode,
+                                   const TriggerState& st,
+                                   const KeyEvent& ev) {
+    TriggerResult r;
+    r.next = st;
+
+    // 1. Timeout tick: resolve a pending chord that expired.
+    if (ev.isTimeout) {
+        if (st.pending && (ev.nowMs - st.pendingSinceMs) > kChordTimeoutMs) {
+            r.next.pending = false;
+            r.next.pendingVk = 0;
+            // Only CtrlFN swallowed a real Ctrl+F (search) it now owes back.
+            if (mode == TriggerMode::CtrlFN && st.pendingVk == kVkF) {
+                r.action = TriggerAction::ReplayCtrlF;
+            }
+        }
+        return r;
+    }
+
+    // 2. Never react to our own injected input (avoids a feedback loop).
+    if (ev.injected) {
+        return r;
+    }
+
+    // 3. Swallow the key-up of a key whose key-down we swallowed (no stray char).
+    if (!ev.isDown) {
+        if (st.swallowUpVk != 0 && ev.vk == st.swallowUpVk) {
+            r.swallow = true;
+            r.next.swallowUpVk = 0;
+        }
+        return r;
+    }
+
+    // --- key DOWN from here ---
+    const bool cleanCtrl = ev.ctrlDown && !ev.altDown && !ev.shiftDown;
+
+    // 4. Complete (or abandon) a pending chord.
+    if (st.pending) {
+        const bool expired = (ev.nowMs - st.pendingSinceMs) > kChordTimeoutMs;
+        const int wantSecond = (mode == TriggerMode::CtrlFN) ? kVkN
+                             : (mode == TriggerMode::CtrlNF) ? kVkF
+                             : 0;
+
+        if (!expired && wantSecond != 0 && ev.vk == wantSecond && ev.ctrlDown) {
+            r.swallow = true;
+            r.action = TriggerAction::CreateFolder;
+            r.next.pending = false;
+            r.next.pendingVk = 0;
+            r.next.swallowUpVk = ev.vk;
+            return r;
+        }
+
+        // Auto-repeat of the first chord key: keep swallowing, stay pending.
+        if (!expired && ev.vk == st.pendingVk && ev.ctrlDown) {
+            r.swallow = true;
+            return r;
+        }
+
+        // Chord broken or expired: abandon, replaying Ctrl+F only for CtrlFN.
+        r.next.pending = false;
+        r.next.pendingVk = 0;
+        if (mode == TriggerMode::CtrlFN && st.pendingVk == kVkF) {
+            r.action = TriggerAction::ReplayCtrlF;
+        }
+        return r;  // let the current key through
+    }
+
+    // 5a. Ctrl+Shift+N: single-press, fires immediately. This overlays the
+    // shortcut Windows itself already binds to "New folder", so we just take
+    // it over to add naming + batch. It needs Ctrl AND Shift held (Alt clear),
+    // which is a DIFFERENT modifier gate than cleanCtrl -- so it is handled
+    // before the cleanCtrl passthrough guard below. There is nothing to replay:
+    // we are enhancing the native gesture, not suppressing a competing one.
+    if (mode == TriggerMode::CtrlShiftN) {
+        const bool ctrlShift = ev.ctrlDown && ev.shiftDown && !ev.altDown;
+        if (ctrlShift && ev.explorerForeground && ev.vk == kVkN) {
+            r.swallow = true;
+            r.action = TriggerAction::CreateFolder;
+            r.next.swallowUpVk = kVkN;
+        }
+        return r;
+    }
+
+    // 5. Not pending: react to the FIRST trigger key for this mode.
+    if (!cleanCtrl || !ev.explorerForeground) {
+        return r;  // passthrough
+    }
+
+    switch (mode) {
+        case TriggerMode::CtrlN:
+            if (ev.vk == kVkN) {
+                r.swallow = true;
+                r.action = TriggerAction::CreateFolder;
+                r.next.swallowUpVk = kVkN;
+            }
+            break;
+
+        case TriggerMode::CtrlFN:
+            if (ev.vk == kVkF) {
+                r.swallow = true;  // suppress search until we learn if N follows
+                r.next.pending = true;
+                r.next.pendingVk = kVkF;
+                r.next.pendingSinceMs = ev.nowMs;
+                r.next.swallowUpVk = kVkF;
+            }
+            break;
+
+        case TriggerMode::CtrlNF:
+            if (ev.vk == kVkN) {
+                r.swallow = true;  // suppress new-window
+                r.next.pending = true;
+                r.next.pendingVk = kVkN;
+                r.next.pendingSinceMs = ev.nowMs;
+                r.next.swallowUpVk = kVkN;
+            }
+            break;
+    }
+
+    return r;
+}
+
+// ===========================================================================
+// Multi-folder creation (v0.2.0) -- pure logic, mirrored into the mod.
+// ===========================================================================
+#include <vector>
+
+// Folder-count caps. Default per-run cap is 25; the hard cap is 100 and cannot
+// be exceeded even if the user configures maxFolders higher.
+static const int kFolderDefaultMax = 25;
+static const int kFolderHardCap    = 100;
+
+// Default state of the "Multiple folders in one go" toggle. The classic,
+// least-surprising behaviour is a single folder per trigger, so multi-folder
+// ships OFF by default and is opt-in.
+static const bool kMultiFolderDefaultOn = false;
+
+// Clamp the user's maxFolders setting into the allowed [1, kFolderHardCap] range.
+inline int ClampFolderMax(int maxSetting) {
+    if (maxSetting < 1) {
+        return 1;
+    }
+    if (maxSetting > kFolderHardCap) {
+        return kFolderHardCap;
+    }
+    return maxSetting;
+}
+
+// Resolve how many folders to create for one trigger:
+//   multiEnabled == false        -> always 1 (feature off)
+//   requested   <= 0 (no digits) -> 1
+//   otherwise                    -> min(requested, ClampFolderMax(maxSetting))
+inline int ResolveFolderCount(int requested, bool multiEnabled, int maxSetting) {
+    if (!multiEnabled) {
+        return 1;
+    }
+
+    int effMax = ClampFolderMax(maxSetting);
+    if (requested < 1) {
+        return 1;
+    }
+    if (requested > effMax) {
+        return effMax;
+    }
+    return requested;
+}
+
+// Generate `count` unique folder paths, reserving each within the batch and
+// skipping any that already exist on disk. Uses the Explorer-native sequence
+// "New folder", "New folder (2)", "New folder (3)", ...
+//
+// PERFORMANCE: names are only ever emitted in strictly increasing numeric
+// order, and an index we pass is never revisited. So instead of restarting the
+// "(2), (3), ..." scan for every slot (the old O(count * (disk + batch))
+// behaviour -- thousands of stats at the 100-folder cap in a busy directory),
+// we keep a monotonic `nextIndex` cursor. Each existence probe advances the
+// cursor, giving O(count + preexisting) probes total. Because every candidate
+// index is fresh and unpicked, the batch is inherently collision-free -- no
+// per-slot rescan of `out` is needed. Output is byte-identical to the old
+// generator (multi_name_test.cpp pins the exact names).
+inline std::vector<std::wstring> MakeUniqueFolderNames(
+        const std::wstring& dir, int count, const NameExists& exists,
+        bool autoResolve = true) {
+    std::vector<std::wstring> out;
+    if (count < 1) {
+        return out;
+    }
+
+    // Monotonic cursor over the numeric suffix. Index 1 is the bare
+    // "New folder"; 2+ are "New folder (N)". It only ever moves forward.
+    int nextIndex = 1;
+
+    auto pathForIndex = [&](int i) -> std::wstring {
+        if (i <= 1) {
+            return JoinPath(dir, L"New folder");
+        }
+        wchar_t buf[64] = {0};
+        std::swprintf(buf, 64, L"New folder (%d)", i);
+        return JoinPath(dir, buf);
+    };
+
+    for (int k = 0; k < count; ++k) {
+        if (!autoResolve) {
+            // Numbering disabled: only the bare "New folder" is ever a
+            // candidate. Probe it once; free -> take it (and reserve it so a
+            // second slot in the same batch is skipped), taken -> skip slot.
+            std::wstring base = pathForIndex(1);
+            if (nextIndex <= 1 && !exists(base)) {
+                out.push_back(base);
+            }
+            nextIndex = 2;  // "New folder" can be claimed at most once
+            continue;
+        }
+
+        // Advance the cursor to the next free index. Each iteration is a single
+        // probe; the cursor never rewinds, so total probes stay linear.
+        bool placed = false;
+        for (; nextIndex < 100000; ++nextIndex) {
+            std::wstring candidate = pathForIndex(nextIndex);
+            if (!exists(candidate)) {
+                out.push_back(candidate);
+                ++nextIndex;   // reserve it; next slot starts past it
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            break;
+        }
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Batch naming pattern (mirror of the namingPattern setting in the mod).
+// Chooses ONLY how the batch NUMBER is formatted; the base name and the
+// skip-existing collision resolution are identical for every pattern.
+//   Space  : "<base> 1"      (default; unchanged legacy behaviour)
+//   Dash2  : "<base>-01"      (dash separator, 2-digit zero-pad)
+//   Dash3  : "<base>-001"     (dash separator, 3-digit zero-pad)
+//   Paren2 : "<base> (01)"    (space + parenthesised 2-digit zero-pad)
+// Zero-pad only pads; a number wider than the pad width is written in full
+// (e.g. Dash2 of 100 -> "-100"), so the sequence never collides by truncation.
+// ---------------------------------------------------------------------------
+enum class NamePattern {
+    Space  = 0,   // "<base> N"
+    Dash2  = 1,   // "<base>-0N"
+    Dash3  = 2,   // "<base>-00N"
+    Paren2 = 3,   // "<base> (0N)"
+    Under2 = 4,   // "<base>_0N"
+    Under3 = 5,   // "<base>_00N"
+};
+
+// Left-pad a positive integer to at least `width` digits (never truncates).
+inline std::wstring PadNumber(int n, int width) {
+    std::wstring s = std::to_wstring(n);
+    while (static_cast<int>(s.size()) < width) {
+        s.insert(s.begin(), L'0');
+    }
+    return s;
+}
+
+// Render one batch member name (without the directory) for a given index.
+inline std::wstring FormatBatchName(const std::wstring& base, int index,
+                                    NamePattern pattern) {
+    switch (pattern) {
+        case NamePattern::Dash2:
+            return base + L"-" + PadNumber(index, 2);
+        case NamePattern::Dash3:
+            return base + L"-" + PadNumber(index, 3);
+        case NamePattern::Paren2:
+            return base + L" (" + PadNumber(index, 2) + L")";
+        case NamePattern::Under2:
+            return base + L"_" + PadNumber(index, 2);
+        case NamePattern::Under3:
+            return base + L"_" + PadNumber(index, 3);
+        case NamePattern::Space:
+        default:
+            return base + L" " + std::to_wstring(index);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Named batch generator (used by the auto-resolve-OFF path once the user has
+// typed a base name). Produces `count` folders whose number is formatted by
+// `pattern` (default Space -> "<base> 1", "<base> 2", ...), skipping any that
+// already exist on disk. A monotonic cursor advances past existing numbers, so
+// the batch never clobbers and still yields `count` new names. Empty base or
+// count < 1 -> no names (caller falls back to a single default folder).
+// ---------------------------------------------------------------------------
+inline std::vector<std::wstring> MakeNamedFolderNames(
+        const std::wstring& dir, const std::wstring& base, int count,
+        const NameExists& exists, NamePattern pattern = NamePattern::Space) {
+    std::vector<std::wstring> out;
+    if (count < 1 || base.empty()) {
+        return out;
+    }
+
+    auto pathForIndex = [&](int i) -> std::wstring {
+        return JoinPath(dir, FormatBatchName(base, i, pattern));
+    };
+
+    int nextIndex = 1;
+    for (int k = 0; k < count; ++k) {
+        bool placed = false;
+        for (; nextIndex < 1000000; ++nextIndex) {
+            std::wstring candidate = pathForIndex(nextIndex);
+            if (!exists(candidate)) {
+                out.push_back(candidate);
+                ++nextIndex;  // reserve it; the next slot starts past it
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            break;
+        }
+    }
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Count-entry state machine (runs after a trigger fires while multi is on).
+// ---------------------------------------------------------------------------
+enum class CountKey {
+    Digit,    // 0-9 (value passed separately)
+    Enter,    // commit
+    Escape,   // cancel (create nothing)
+    Other,    // any other key: commit accumulated; swallowed while Ctrl held
+              // (never leak Ctrl+key), passes through only after Ctrl release
+    Timeout,  // count-entry window elapsed: commit
+};
+
+enum class CountOutcome {
+    Continue,  // still capturing
+    Commit,    // create `count` folders
+    Cancel,    // create none
+};
+
+struct CountState {
+    bool active = false;    // a count-entry window is open
+    int value = 0;          // digits accumulated so far
+    bool sawDigit = false;  // at least one digit typed
+};
+
+struct CountResult {
+    bool swallow = false;              // hide this key from Explorer
+    CountOutcome outcome = CountOutcome::Continue;
+    int count = 0;                     // valid when outcome == Commit (clamped)
+    CountState next;
+};
+
+// Decide what a key does during count entry. `digit` is 0-9 only when key==Digit.
+// `ctrlHeld` must be true for the whole gesture: the count window only lives
+// while Ctrl stays down. The moment Ctrl is released, capture ends -- committing
+// the typed digits, or cancelling if none were typed yet.
+inline CountResult CountDecide(CountState st, CountKey key, int digit,
+                               bool multiEnabled, int maxSetting,
+                               bool ctrlHeld = true) {
+    CountResult r;
+    r.next = st;
+
+    // Helper: end the capture window and reset accumulation.
+    auto endCapture = [](CountResult& res) {
+        res.next.active = false;
+        res.next.value = 0;
+        res.next.sawDigit = false;
+    };
+
+    // Ctrl-held-throughout: releasing Ctrl ends entry immediately. A synthetic
+    // Timeout tick is exempt (it isn't a key and can arrive after release).
+    if (!ctrlHeld && key != CountKey::Timeout) {
+        // A DIGIT is explicit intent and must be honoured even if Ctrl reads
+        // released on this same event: the low-level hook can see the digit
+        // keydown after GetAsyncKeyState(VK_CONTROL) already flipped to up
+        // (observed as "sawDigit=0 -> requested=0 -> count=1"). Fold the digit
+        // into the accumulator, THEN commit -- so "Ctrl+F+N then 9" makes 9.
+        int accumulated = st.sawDigit ? st.value : 0;
+        // Only the FIRST digit of a fresh capture can arrive on the same event
+        // Ctrl reads released (the observed race). Once a digit was already
+        // captured (st.sawDigit), the release event just commits what's there
+        // -- a stray digit on release is not appended.
+        if (key == CountKey::Digit && !st.sawDigit) {
+            int v = digit;
+            if (v > kFolderHardCap) {
+                v = kFolderHardCap;
+            }
+            accumulated = v;
+            r.swallow = true;  // this digit is ours; don't leak it to Explorer
+        } else {
+            r.swallow = false;  // nothing to hide: the releasing key isn't ours
+        }
+        // Releasing Ctrl finishes the gesture: commit the typed digits (incl.
+        // the digit on this very event), or the default single folder when
+        // none were typed. Only Esc cancels now.
+        r.outcome = CountOutcome::Commit;
+        r.count = ResolveFolderCount(accumulated, multiEnabled, maxSetting);
+        endCapture(r);
+        return r;
+    }
+
+    switch (key) {
+        case CountKey::Digit: {
+            int v = st.value * 10 + digit;
+            if (v > kFolderHardCap) {
+                v = kFolderHardCap;  // never accumulate past the hard cap
+            }
+            r.next.value = v;
+            r.next.sawDigit = true;
+            r.swallow = true;
+            r.outcome = CountOutcome::Continue;
+            return r;
+        }
+
+        case CountKey::Enter:
+        case CountKey::Timeout: {
+            // Enter is a real key we hide; a timeout is synthetic (nothing to hide).
+            r.swallow = (key == CountKey::Enter);
+            r.outcome = CountOutcome::Commit;
+            r.count = ResolveFolderCount(st.sawDigit ? st.value : 0,
+                                         multiEnabled, maxSetting);
+            endCapture(r);
+            return r;
+        }
+
+        case CountKey::Escape: {
+            r.swallow = true;
+            r.outcome = CountOutcome::Cancel;
+            endCapture(r);
+            return r;
+        }
+
+        case CountKey::Other:
+        default: {
+            // A non-count key while Ctrl is STILL held (the ctrlHeld==false
+            // release path returned above). Commit what we have (or 1) but
+            // SWALLOW the key: Ctrl is down, so letting it reach Explorer would
+            // fire a Ctrl+<key> shortcut -- Ctrl+N (new window) / Ctrl+F
+            // (search) -- which is the "a new window opens during the gesture"
+            // bug. Keys only reach Explorer AFTER Ctrl is released (handled by
+            // the ctrlHeld==false branch above, which passes through safely).
+            r.swallow = true;
+            r.outcome = CountOutcome::Commit;
+            r.count = ResolveFolderCount(st.sawDigit ? st.value : 0,
+                                         multiEnabled, maxSetting);
+            endCapture(r);
+            return r;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "Create and open" decision (mirror of the open-after-create gate in the mod).
+//
+// The setting is OFF by default. When ON, after a SINGLE folder is created the
+// mod navigates the active Explorer tab INTO that folder (same window, no new
+// window). It must NEVER open when a batch (>1) was created -- there is no one
+// folder to open, and opening the first would be surprising. It also must not
+// open when nothing was created (createdCount == 0), e.g. a cancelled rename or
+// a clash that was skipped.
+//
+// openAfterCreate : the useOpenAfterCreate setting.
+// createdCount    : how many folders were actually created this run.
+inline bool ShouldOpenAfterCreate(bool openAfterCreate, int createdCount) {
+    return openAfterCreate && createdCount == 1;
+}
+
+// ---------------------------------------------------------------------------
+// Type-speed timeouts (mirror of the typeSpeed setting in the mod).
+//
+// One setting scales BOTH time windows a slow typist can hit:
+//   * the count-entry window (how long to type the batch number), and
+//   * the inline-rename watch (how long to type the folder name).
+// The chord gap (F->N) is deliberately NOT scaled -- it is a keystroke gap, not
+// typing, so it stays fixed.
+//
+// Three presets only (0=Normal default, 1=Relaxed, 2=Patient). No free-form
+// number entry: an arbitrary value (e.g. 50 ms, or 10 minutes) would just break
+// the gesture, so the choices are constrained to sane, tested pairs. An unknown
+// value falls back to Normal.
+enum class TypeSpeed {
+    Normal  = 0,  // default: current behavior (1200 ms / 30 s)
+    Relaxed = 1,  // 2500 ms / 60 s
+    Patient = 2,  // 4000 ms / 120 s
+};
+
+// Count-entry window in milliseconds for a given speed.
+inline unsigned long CountWindowMsForSpeed(int speed) {
+    switch (speed) {
+        case 1:  return 2500;
+        case 2:  return 4000;
+        case 0:
+        default: return 1200;
+    }
+}
+
+// Inline-rename watch window in milliseconds for a given speed.
+inline unsigned long RenameWatchMsForSpeed(int speed) {
+    switch (speed) {
+        case 1:  return 60000;
+        case 2:  return 120000;
+        case 0:
+        default: return 30000;
+    }
+}
