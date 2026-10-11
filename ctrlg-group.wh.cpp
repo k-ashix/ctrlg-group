@@ -2,7 +2,7 @@
 // @id              ctrlg-group
 // @name            Ctrl+G to Group Folder/Files
 // @description     Ctrl+G makes Folder/Files
-// @version         0.12.60
+// @version         0.12.61
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -330,6 +330,50 @@ hook / worker-thread design. Credit and thanks to their authors:
     $description: >-
       Off (default): stay where you are after grouping. On: open the destination
       folder (in the active Explorer tab) once the items have been grouped.
+  - autoGroupEnabled: true
+    $name: Auto Group button
+    $description: >-
+      Show the timed Auto Group button in the Ctrl+G popup. Auto Group sorts the
+      selected files into folders named after their extensions (JPG, PNG, MD,
+      ...) without you typing a folder name. The button becomes available after
+      a five-second safety delay. Off: the button is not shown and normal Ctrl+G
+      grouping is unchanged.
+  - autoGroupLayout: flat
+    $name: Auto Group folder layout
+    $description: >-
+      Flat (default) creates extension folders directly in the destination.
+      Images parent groups image extensions (JPG, PNG, GIF, WEBP, ...) beneath an
+      Images folder, while other extension folders remain at the destination
+      root.
+    $options:
+    - flat: Flat extension folders
+    - imagesParent: Images parent directory
+  - autoGroupImageParentName: "Images"
+    $name: Images parent folder name
+    $description: >-
+      Parent folder for image-extension folders when the Images parent directory
+      layout is selected.
+  - autoGroupSelectedFolders: false
+    $name: Group selected folders into All Folder
+    $description: >-
+      Off (default): leave selected folders untouched. On: move the originally
+      selected folders into All Folder during Auto Group only. Generated
+      extension folders always remain at the destination root. This affects Auto
+      Group only - normal Ctrl+G Group and folder templates are unchanged.
+  - autoGroupFoldersName: "All Folder"
+    $name: All Folder directory name
+    $description: >-
+      Destination directory for selected folders when the optional
+      folder-grouping behavior above is enabled.
+  - autoGroupNoExtension: true
+    $name: Group files without extensions
+    $description: >-
+      On (default): put files without a usable extension into the No Extension
+      directory. Off: leave these files untouched.
+  - autoGroupNoExtensionName: "No Extension"
+    $name: No Extension directory name
+    $description: >-
+      Folder name for files without a usable extension.
   $name: Group Creation (Ctrl+G)
 */
 // ==/WindhawkModSettings==
@@ -429,6 +473,21 @@ static volatile LONG g_groupOpenAfter = 0;             // groupOpenAfter: 0 = st
 // same lock that protects the other settings-thread-written string state) so a
 // settings-change write can't tear a concurrent read.
 static std::wstring g_groupDestination;                // groupDestination (fixed target path; empty = none)
+// ---- Auto Group (ADD-ON) settings state. ISOLATED from the Group state above:
+// these affect ONLY the Auto Group button, never ordinary Ctrl+G Group or the
+// folder templates. LONG flags are read via AtomicGet / written via
+// InterlockedExchange like the other Group flags; the configurable NAMES are
+// std::wstring guarded by the same g_templatesCs lock that protects
+// g_groupDestination. The five-second button delay is a FIXED safety rule and
+// is intentionally NOT a user setting. Defaults mirror autogroup::Settings in
+// tests/auto_group_logic.h.
+static volatile LONG g_autoGroupEnabled = 1;           // autoGroupEnabled: 1 = show the Auto Group button (default), 0 = hidden
+static volatile LONG g_autoGroupLayout = 0;            // autoGroupLayout: 0 = Flat (default), 1 = ImagesParent
+static volatile LONG g_autoGroupSelectedFolders = 0;   // autoGroupSelectedFolders: 0 = leave folders untouched (default), 1 = move into All Folder
+static volatile LONG g_autoGroupNoExtension = 1;       // autoGroupNoExtension: 1 = group extensionless files (default), 0 = leave untouched
+static std::wstring g_autoGroupImageParentName;        // autoGroupImageParentName (default "Images")
+static std::wstring g_autoGroupFoldersName;            // autoGroupFoldersName (default "All Folder")
+static std::wstring g_autoGroupNoExtensionName;        // autoGroupNoExtensionName (default "No Extension")
 // #8: the last destination Ctrl+G actually grouped into. WORKER-THREAD-LOCAL
 // (only read/written inside the WM_APP_GROUP handler), so no lock is needed. A
 // blank folder name in the Group popup reuses this, mirroring ResolveGroupTarget
@@ -766,6 +825,50 @@ static void LoadSettings() {
     if (groupDest) {
         Wh_FreeStringSetting(groupDest);
     }
+
+    // ---- Auto Group (ADD-ON) settings. ISOLATED from the Group settings above;
+    // parsing one of these never changes a g_group* value, so existing Ctrl+G
+    // Group defaults/behaviour are untouched. LONG flags are published with
+    // InterlockedExchange; the configurable NAMES are written under g_templatesCs
+    // like g_groupDestination. The five-second delay is a fixed safety rule and
+    // has no setting. Blank/whitespace names fall back to the documented default
+    // so a misconfigured name can never produce an empty bucket path.
+    InterlockedExchange(&g_autoGroupEnabled,
+                        Wh_GetIntSetting(L"Group.autoGroupEnabled") != 0 ? 1 : 0);
+    // Layout: a string option like `groupOperation`; unknown -> Flat (0).
+    LONG autoLayout = 0;  // flat default
+    PCWSTR autoLay = Wh_GetStringSetting(L"Group.autoGroupLayout");
+    if (autoLay) {
+        if (wcscmp(autoLay, L"imagesParent") == 0) {
+            autoLayout = 1;
+        }
+        Wh_FreeStringSetting(autoLay);
+    }
+    InterlockedExchange(&g_autoGroupLayout, autoLayout);
+    InterlockedExchange(&g_autoGroupSelectedFolders,
+                        Wh_GetIntSetting(L"Group.autoGroupSelectedFolders") != 0 ? 1 : 0);
+    InterlockedExchange(&g_autoGroupNoExtension,
+                        Wh_GetIntSetting(L"Group.autoGroupNoExtension") != 0 ? 1 : 0);
+    // Configurable folder names, each with a safe non-empty default.
+    auto trimmedOrDefault = [](PCWSTR raw, const wchar_t* fallback) -> std::wstring {
+        std::wstring s = raw ? raw : L"";
+        std::size_t b = 0, e = s.size();
+        while (b < e && (s[b] == L' ' || s[b] == L'\t')) ++b;
+        while (e > b && (s[e - 1] == L' ' || s[e - 1] == L'\t')) --e;
+        s = s.substr(b, e - b);
+        return s.empty() ? std::wstring(fallback) : s;
+    };
+    PCWSTR autoImg = Wh_GetStringSetting(L"Group.autoGroupImageParentName");
+    PCWSTR autoAll = Wh_GetStringSetting(L"Group.autoGroupFoldersName");
+    PCWSTR autoNoExt = Wh_GetStringSetting(L"Group.autoGroupNoExtensionName");
+    EnterCriticalSection(&g_templatesCs);
+    g_autoGroupImageParentName = trimmedOrDefault(autoImg, L"Images");
+    g_autoGroupFoldersName = trimmedOrDefault(autoAll, L"All Folder");
+    g_autoGroupNoExtensionName = trimmedOrDefault(autoNoExt, L"No Extension");
+    LeaveCriticalSection(&g_templatesCs);
+    if (autoImg) Wh_FreeStringSetting(autoImg);
+    if (autoAll) Wh_FreeStringSetting(autoAll);
+    if (autoNoExt) Wh_FreeStringSetting(autoNoExt);
 
     // Type-speed preset (0=Normal, 1=Relaxed, 2=Patient). Read as a string
     // option like `trigger`; any unknown value maps to Normal.
@@ -2553,6 +2656,9 @@ struct PromptLayout {
     Rect opToggle;      // group only: single Copy|Move toggle (alias of segCopy)
     Rect createButton;  // bottom action row
     Rect cancelButton;  // bottom action row
+    Rect autoGroupButton; // bottom action row (ADD-ON): timed Auto Group button,
+                          // left of Create/Group. Zero-size when Auto Group is
+                          // disabled in settings (button not created).
 };
 
 inline int ScaleForDpi(int value96, int dpi) {
@@ -2577,6 +2683,9 @@ inline constexpr int kNameFieldH     = 32;  // fix #7 (pass6): group Folder name
 inline constexpr int kButtonW        = 74;
 inline constexpr int kButtonH        = 30;
 inline constexpr int kButtonGap      = 8;   // fix #13: 4px-grid gap (was 6)
+inline constexpr int kAutoGroupBtnW  = 108; // ADD-ON: wider footer button so
+                                            // "Auto Group (5)" fits; fixed width
+                                            // so the row never reflows per second
 inline constexpr int kLabelTop       = 18;
 inline constexpr int kFieldTop       = 46;
 inline constexpr int kActionRowTop   = 92;
@@ -2600,8 +2709,10 @@ inline constexpr int kSelListPadV       = 8;    // fix #1: list top+bottom paddi
 // fix thse isseue.md #3: Selected card content padding + owner-draw header
 // rhythm, so the card height is DERIVED from the inset content block.
 inline constexpr int kSelectedPad       = kSpace5;  // 20  content inset on all 4 sides (fix thse isseue.md #3: more breathing room, was 16/kSpace4)
+inline constexpr int kSelListRightInset = 12;   // fix thse isseue.md #4: dedicated inner RIGHT inset for the selected list content (rows, size/ext metadata, chip clip, divider endpoint, scrollbar track) -- extra breathing room from the card's right edge, applied ONCE inside the list painter (NOT a second card inset)
 inline constexpr int kSelTitleH         = 24;   // title row height (owner-draw S(24))
-inline constexpr int kSelCountsH        = 16;   // type-breakdown row (owner-draw S(16))
+inline constexpr int kSelCountsH        = 24;   // fix thse isseue.md #1: summary-chip PILL row -- reserves the metric-derived pill height (semibold 12px + 4+4 vertical padding); was a hardcoded 16
+inline constexpr int kSelTitleChipGap   = 6;    // fix thse isseue.md #1: gap between the Selected title and the chip row (6px; the general rhythm elsewhere stays kSelHdrGap=4)
 inline constexpr int kSelDividerH       = 1;    // 1px hairline divider
 inline constexpr int kSelHdrGap         = 4;    // even gap: title/counts/divider/rows (fix thse isseue.md #3: 4px rhythm, was 3; owner-draw S(4))
 inline constexpr int kDestCardH         = 100;   // title+10 h18, desc+32 h16, field+56 h26 (ends 82) -> +12 bottom (P2 #13 rhythm)
@@ -2711,7 +2822,7 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     // small selection leaves no empty space; the owner-drawn list HWND sits in
     // selectedContent, so the parent-painted rounded card border stays intact.
     const int selContentH =
-        kSelTitleH + kSelHdrGap + kSelCountsH + kSelHdrGap +
+        kSelTitleH + kSelTitleChipGap + kSelCountsH + kSelHdrGap +
         kSelDividerH + kSelHdrGap + visRows * kSelRowH;
     L.selectedContent = Rect{kOuterMargin + kSelectedPad, cardTop + kSelectedPad,
                              contentW - kSelectedPad * 2, selContentH};
@@ -2720,7 +2831,7 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     L.groupHeader  = L.selectedCard;   // alias: whole card rect (card wiring only)
     L.selectedHeader = Rect{L.selectedContent.x, L.selectedContent.y,
                             L.selectedContent.w,
-                            kSelTitleH + kSelHdrGap + kSelCountsH + kSelHdrGap +
+                            kSelTitleH + kSelTitleChipGap + kSelCountsH + kSelHdrGap +
                                 kSelDividerH};
     L.selectedList   = Rect{L.selectedContent.x,
                             L.selectedHeader.bottom() + kSelHdrGap,
@@ -2768,6 +2879,18 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     const int rowY = L.actionCard.bottom() + kSpace3;
     L.createButton = Rect{createX2, rowY, kButtonW, kButtonH};
     L.cancelButton = Rect{cancelX2, rowY, kButtonW, kButtonH};
+
+    // ADD-ON: the timed Auto Group button sits LEFT of Group/Create, so the
+    // bottom row reads [Auto Group (5)] [Group] [Cancel]. Its label is wider
+    // than the 74px standard button, so give it kAutoGroupBtnW. The rect is
+    // always computed (pure geometry); WM_CREATE only CREATES the control when
+    // Auto Group is enabled in settings. The width is fixed and independent of
+    // the countdown digit so the row never reflows each second.
+    {
+        const int autoW = kAutoGroupBtnW;
+        const int autoX = createX2 - kButtonGap - autoW;
+        L.autoGroupButton = Rect{autoX, rowY, autoW, kButtonH};
+    }
 
     L.windowH = rowY + kButtonH + kGroupBottomMargin;
     return L;
@@ -3013,6 +3136,16 @@ inline NameParts SplitName(const std::wstring& name, bool isFolder) {
 inline std::wstring RowName(const std::wstring& name, bool isFolder) {
     return SplitName(name, isFolder).stem;
 }
+// The filename TEXT drawn in a Selected Items row, honoring the Show-extensions
+// toggle (fix thse isseue.md Phase 1B): extensions ON renders the COMPLETE
+// filename inline for files (e.g. "README.md"); OFF renders the stem. Folders
+// always render their whole name regardless of the toggle. A separate extension
+// pill is never drawn in either state.
+inline std::wstring RowDisplayName(const std::wstring& name, bool isFolder,
+                                   bool extInline) {
+    if (extInline && !isFolder) return name;
+    return RowName(name, isFolder);
+}
 inline std::wstring ExtLabel(const std::wstring& name, bool isFolder) {
     std::wstring ext = SplitName(name, isFolder).ext;
     for (auto& c : ext) c = static_cast<wchar_t>(towupper(c));
@@ -3026,11 +3159,567 @@ inline std::wstring HumanSize(long long bytes) {
     int idx = 0;
     while (idx < 3 && bytes >= unit * 1024) { unit *= 1024; ++idx; }
     const long long tenths = (bytes * 10 + unit / 2) / unit;
+    if (tenths >= 100) {
+        // Value is >= 10 in this unit: a whole number reads cleaner than a
+        // trailing ".0" and keeps the badge short (e.g. "24 KB", "318 KB").
+        const long long whole = (bytes + unit / 2) / unit;
+        return std::to_wstring(whole) + L" " + units[idx];
+    }
     return std::to_wstring(tenths / 10) + L"." + std::to_wstring(tenths % 10) +
            L" " + units[idx];
 }
 
+// Pick which byte count to display: prefer the filesystem's size-ON-DISK
+// (allocated) metadata when available (allocated >= 0), else the logical file
+// length, else unknown (-1). The actual metadata query lives in the Win32
+// capture layer; this is only the selection rule so it can be unit-tested.
+inline long long ChooseSizeBytes(long long logicalBytes, long long allocatedBytes) {
+    if (allocatedBytes >= 0) return allocatedBytes;
+    return logicalBytes;
+}
+
 }  // namespace sel
+
+// ---- Auto Group five-second countdown state model (ADD-ON) ----
+// Byte-for-byte mirror of tests/auto_group_countdown_logic.h. Keep in lockstep.
+// Pure: takes a MONOTONIC tick (the mod feeds GetTickCount64()) + the popup's
+// start tick, so a stalled/busy message loop or a delayed WM_TIMER can never
+// unlock the button early or late. Expiry NEVER runs the operation -- it only
+// flips the button to Enabled; the user must click it.
+namespace agcd {
+
+enum class State {
+    Unavailable,  // Auto Group disabled in settings -> button not shown/active
+    Waiting,      // within the 5s safety delay -> disabled, shows a countdown
+    Enabled,      // 5s elapsed -> clickable "Auto Group"
+};
+
+inline unsigned long long DelayMs() { return 5000; }
+
+inline int TotalSeconds() { return 5; }
+
+inline State Resolve(bool enabledSetting, unsigned long long startTick, unsigned long long nowTick) {
+    if (!enabledSetting) return State::Unavailable;
+    const unsigned long long elapsed = (nowTick >= startTick) ? (nowTick - startTick) : 0;
+    return (elapsed >= DelayMs()) ? State::Enabled : State::Waiting;
+}
+
+inline unsigned long long RemainingMs(bool enabledSetting, unsigned long long startTick, unsigned long long nowTick) {
+    if (!enabledSetting) return 0;
+    const unsigned long long elapsed = (nowTick >= startTick) ? (nowTick - startTick) : 0;
+    return (elapsed >= DelayMs()) ? 0 : (DelayMs() - elapsed);
+}
+
+inline int RemainingSeconds(bool enabledSetting, unsigned long long startTick, unsigned long long nowTick) {
+    const unsigned long long rem = RemainingMs(enabledSetting, startTick, nowTick);
+    if (rem == 0) return 0;
+    return static_cast<int>((rem + 999) / 1000);
+}
+
+inline std::wstring Label(State s, int remainingSeconds) {
+    if (s == State::Waiting) {
+        return L"Auto Group (" + std::to_wstring(remainingSeconds) + L")";
+    }
+    return L"Auto Group";
+}
+
+// fix thse isseue.md #5: STABLE M:SS countdown shown inside the button during
+// the delay (minutes:seconds, seconds zero-padded, NO milliseconds). Driven by
+// the whole-second RemainingSeconds value so the text changes at most once a
+// second: 0:05, 0:04, 0:03, 0:02, 0:01.
+inline std::wstring CountdownText(int remainingSeconds) {
+    if (remainingSeconds < 0) remainingSeconds = 0;
+    const int m = remainingSeconds / 60;
+    const int s = remainingSeconds % 60;
+    std::wstring ss = std::to_wstring(s);
+    if (ss.size() < 2) ss = L"0" + ss;
+    return std::to_wstring(m) + L":" + ss;
+}
+
+// fix thse isseue.md Phase 4: the repaint timer must invalidate the Auto Group
+// button ONLY when the VISIBLE whole-second countdown OR the enabled/disabled
+// state actually changes -- never once per tick (that per-tick erase/repaint
+// was the flashing cause). The WM_TIMER handler calls this before any
+// InvalidateRect, so the anti-flicker contract is unit-tested, not inlined.
+inline bool ShouldRepaint(int curSec, int lastSec, bool curEnabled,
+                          bool lastEnabled) {
+    return curSec != lastSec || curEnabled != lastEnabled;
+}
+
+inline bool Clickable(State s) { return s == State::Enabled; }
+
+inline bool ShowOverlay(State s) { return s == State::Waiting; }
+
+inline bool Visible(State s) { return s != State::Unavailable; }
+
+}  // namespace agcd
+
+// ---- Auto Group classification + destination-planning model (ADD-ON) ----
+// Byte-for-byte mirror of tests/auto_group_logic.h (lines 36..497). Keep in
+// lockstep. Pure planning only -- no Win32, no filesystem; the worker calls
+// BuildPlan() and executes the resulting buckets via PerformGroupOperation.
+namespace autogroup {
+
+// ---------------------------------------------------------------------------
+// Path helpers (pure, separator-normalised). Windows paths use backslash but
+// the mod also tolerates forward slashes, so these treat both as separators.
+// Kept local so this model is self-contained and testable on its own.
+// ---------------------------------------------------------------------------
+
+inline bool IsSep(wchar_t c) { return c == L'\\' || c == L'/'; }
+
+// Strip one trailing separator ("C:\a\" -> "C:\a"); a bare drive root keeps it.
+inline std::wstring TrimSep(const std::wstring& p) {
+    if (p.size() > 1 && IsSep(p[p.size() - 1])) {
+        if (p.size() == 3 && p[1] == L':') return p;  // keep "C:\"
+        return p.substr(0, p.size() - 1);
+    }
+    return p;
+}
+
+// Parent directory of a path (everything before the last separator). Empty when
+// there is no separator or the path is only a drive root.
+inline std::wstring ParentDir(const std::wstring& path) {
+    std::wstring p = TrimSep(path);
+    if (p.size() <= 3 && p.size() >= 2 && p[1] == L':') return std::wstring();
+    std::wstring::size_type pos = std::wstring::npos;
+    for (std::wstring::size_type i = p.size(); i > 0; --i) {
+        if (IsSep(p[i - 1])) { pos = i - 1; break; }
+    }
+    if (pos == std::wstring::npos) return std::wstring();
+    if (pos == 2 && p[1] == L':') return p.substr(0, 3);  // "C:\a" -> "C:\"
+    return p.substr(0, pos);
+}
+
+// Case-insensitive equality for ASCII paths (Windows paths are case-insensitive).
+inline bool PathEqualCI(const std::wstring& a, const std::wstring& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        wchar_t ca = a[i], cb = b[i];
+        if (ca >= L'A' && ca <= L'Z') ca = static_cast<wchar_t>(ca - L'A' + L'a');
+        if (cb >= L'A' && cb <= L'Z') cb = static_cast<wchar_t>(cb - L'A' + L'a');
+        // Normalise separators so '\\' and '/' compare equal.
+        if (IsSep(ca)) ca = L'\\';
+        if (IsSep(cb)) cb = L'\\';
+        if (ca != cb) return false;
+    }
+    return true;
+}
+
+// Join a directory and a child name with a single backslash.
+inline std::wstring Join(const std::wstring& dir, const std::wstring& child) {
+    std::wstring d = TrimSep(dir);
+    if (d.empty()) return child;
+    return d + L"\\" + child;
+}
+
+// ---------------------------------------------------------------------------
+// #1  Canonical extension-bucket folder name.
+// Normalises an item's extension to an UPPERCASE folder name. JPG and JPEG map
+// to the SAME canonical bucket "JPG" (no duplicate image folders). Works for
+// new / uncommon extensions -- there is NO hardcoded whitelist. Folders and
+// extensionless files return an empty string (they are not extension buckets).
+// ---------------------------------------------------------------------------
+
+// Lowercase + strip a single leading dot. "MD"/".md"/"Md" -> "md".
+inline std::wstring NormKey(const std::wstring& extLabel) {
+    std::wstring e = extLabel;
+    std::size_t start = (!e.empty() && e[0] == L'.') ? 1u : 0u;
+    std::wstring out;
+    for (std::size_t i = start; i < e.size(); ++i) {
+        wchar_t c = e[i];
+        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Uppercase a normalized key for display. "md" -> "MD".
+inline std::wstring Upper(const std::wstring& key) {
+    std::wstring out;
+    for (wchar_t c : key) {
+        if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - L'a' + L'A');
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Canonical lowercase bucket KEY for an item. ".jpeg" collapses to "jpg" so a
+// single image bucket holds both. Returns "" for folders / extensionless files.
+inline std::wstring CanonicalKey(const std::wstring& name, bool isFolder) {
+    if (isFolder) return std::wstring();
+    std::wstring key = NormKey(sel::ExtLabel(name, false));
+    if (key.empty()) return std::wstring();
+    if (key == L"jpeg" || key == L"jpe") key = L"jpg";  // canonicalise JPEG->JPG
+    return key;
+}
+
+// Canonical UPPERCASE bucket FOLDER NAME for an item (e.g. "JPG"). Empty for
+// folders / extensionless files.
+inline std::wstring CanonicalExtFolder(const std::wstring& name, bool isFolder) {
+    return Upper(CanonicalKey(name, isFolder));
+}
+
+// ---------------------------------------------------------------------------
+// #2  Image-extension category (explicit, tested). Only these go under the
+// configured Images parent in Mode B. Keys are the CANONICAL keys, so "jpeg"
+// is already folded into "jpg" before this is consulted.
+// ---------------------------------------------------------------------------
+
+inline bool IsImageKey(const std::wstring& canonicalKey) {
+    static const wchar_t* kImageKeys[] = {
+        L"jpg",  L"png",  L"gif",  L"webp", L"bmp",  L"tif",  L"tiff",
+        L"heic", L"heif", L"avif", L"ico",  L"svg",  L"jfif", L"raw",
+    };
+    for (const wchar_t* k : kImageKeys) {
+        if (canonicalKey == k) return true;
+    }
+    return false;
+}
+
+// Convenience overload taking a bucket FOLDER NAME (e.g. "JPG").
+inline bool IsImageBucket(const std::wstring& bucketFolder) {
+    return IsImageKey(NormKey(bucketFolder));
+}
+
+// ---------------------------------------------------------------------------
+// #3  Folder-name validation + sanitization.
+// A bucket folder name is derived from an extension (and extensions can be odd:
+// long, containing invalid characters, or spelling a reserved device name).
+// Reject names we cannot represent safely rather than silently producing a bad
+// path. Returns true + the sanitized name when usable; false when the name must
+// be rejected (so the caller can safely skip that bucket).
+// ---------------------------------------------------------------------------
+
+inline bool IsReservedDeviceName(const std::wstring& nameUpper) {
+    static const wchar_t* kReserved[] = {
+        L"CON", L"PRN", L"AUX", L"NUL",
+        L"COM1", L"COM2", L"COM3", L"COM4", L"COM5",
+        L"COM6", L"COM7", L"COM8", L"COM9",
+        L"LPT1", L"LPT2", L"LPT3", L"LPT4", L"LPT5",
+        L"LPT6", L"LPT7", L"LPT8", L"LPT9",
+    };
+    for (const wchar_t* r : kReserved) {
+        if (nameUpper == r) return true;
+    }
+    return false;
+}
+
+inline bool IsInvalidNameChar(wchar_t c) {
+    // Windows forbids these in a path component, plus control chars.
+    if (c < 0x20) return true;
+    switch (c) {
+        case L'<': case L'>': case L':': case L'"': case L'/':
+        case L'\\': case L'|': case L'?': case L'*':
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Longest path component we will accept for a generated bucket (well under
+// MAX_PATH component limits, leaving room for the destination root).
+inline std::size_t MaxBucketNameLen() { return 64u; }
+
+struct SanitizeResult {
+    bool ok = false;             // false => reject this bucket entirely
+    std::wstring name;           // sanitized name when ok
+};
+
+// Validate/sanitize a proposed bucket folder name. The input is normally an
+// uppercase extension bucket ("JPG") or a configured name ("No Extension",
+// "Images", "All Folder"). Trailing dots/spaces are trimmed (Windows strips
+// them anyway). Any invalid character, an empty result, a reserved device name,
+// or an over-long name is REJECTED (ok=false) so the caller can skip it rather
+// than silently merging unrelated types.
+inline SanitizeResult SanitizeBucketName(const std::wstring& proposed) {
+    SanitizeResult r;
+    std::wstring s = proposed;
+
+    // Trim leading/trailing whitespace.
+    std::size_t b = 0, e = s.size();
+    while (b < e && (s[b] == L' ' || s[b] == L'\t')) ++b;
+    while (e > b && (s[e - 1] == L' ' || s[e - 1] == L'\t')) --e;
+    s = s.substr(b, e - b);
+
+    // Windows strips trailing dots and spaces from a component; a name that is
+    // ONLY dots/spaces becomes empty and must be rejected.
+    while (!s.empty() && (s.back() == L'.' || s.back() == L' ')) s.pop_back();
+
+    if (s.empty()) return r;                 // nothing usable
+    if (s.size() > MaxBucketNameLen()) return r;
+
+    for (wchar_t c : s) {
+        if (IsInvalidNameChar(c)) return r;  // reject, do not substitute
+    }
+
+    // Reserved device names are compared case-insensitively, bare or with any
+    // extension (e.g. "CON", "con.txt") -- here the component is a bare bucket.
+    std::wstring upper = Upper(NormKey(s.find(L'.') == std::wstring::npos
+                                           ? s
+                                           : s.substr(0, s.find(L'.'))));
+    if (IsReservedDeviceName(upper)) return r;
+
+    r.ok = true;
+    r.name = s;
+    return r;
+}
+
+// ---------------------------------------------------------------------------
+// #4  Dedicated Auto Group destination resolver.
+// Precedence (NEVER uses g_lastGroupTarget or the last typed name):
+//   1. configured Fixed destination folder, if set.
+//   2. else the common filesystem parent of the selection (if they share one).
+//   3. else CANNOT resolve -> safe cancel (needs a common parent or a
+//      configured destination).
+// ---------------------------------------------------------------------------
+
+enum class DestStatus {
+    Fixed,          // used the configured fixed destination
+    CommonParent,   // used the common parent of the selection
+    NoCommonParent, // selection spans multiple parents, no fixed dest -> cancel
+    EmptySelection, // nothing selected -> cancel
+};
+
+struct DestResult {
+    DestStatus status = DestStatus::EmptySelection;
+    std::wstring root;              // destination root (empty unless resolved)
+    bool resolved() const {
+        return status == DestStatus::Fixed || status == DestStatus::CommonParent;
+    }
+};
+
+// One captured selection entry for planning: full path + whether it is a folder.
+struct SrcItem {
+    std::wstring path;      // full path, e.g. "C:\pics\a.jpg"
+    bool isFolder = false;
+};
+
+// Common parent of all selected items (the directory each item lives in).
+// Returns empty when the items do not all share one parent directory.
+inline std::wstring CommonParent(const std::vector<SrcItem>& items) {
+    if (items.empty()) return std::wstring();
+    std::wstring parent = ParentDir(items[0].path);
+    if (parent.empty()) return std::wstring();
+    for (std::size_t i = 1; i < items.size(); ++i) {
+        std::wstring p = ParentDir(items[i].path);
+        if (p.empty() || !PathEqualCI(p, parent)) return std::wstring();
+    }
+    return parent;
+}
+
+inline DestResult ResolveAutoDest(const std::vector<SrcItem>& items,
+                                  const std::wstring& fixedDest) {
+    DestResult out;
+    if (items.empty()) {
+        out.status = DestStatus::EmptySelection;
+        return out;
+    }
+    if (!fixedDest.empty()) {
+        out.status = DestStatus::Fixed;
+        out.root = TrimSep(fixedDest);
+        return out;
+    }
+    std::wstring parent = CommonParent(items);
+    if (parent.empty()) {
+        out.status = DestStatus::NoCommonParent;
+        return out;
+    }
+    out.status = DestStatus::CommonParent;
+    out.root = TrimSep(parent);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// #5  Deterministic plan.
+// ---------------------------------------------------------------------------
+
+enum class Layout { Flat, ImagesParent };
+
+// ---------------------------------------------------------------------------
+// Settings-parsing helpers (pure, so the mod's LoadSettings and the unit tests
+// share ONE implementation). These never touch the Group settings -- they only
+// decode the Auto Group $options string and the configurable folder names.
+// ---------------------------------------------------------------------------
+
+// Map the autoGroupLayout $option identifier to the layout enum. Only the exact
+// identifier "imagesParent" selects the Images-parent layout; anything else
+// (including null/blank/unknown) is the safe Flat default.
+inline Layout ParseLayout(const wchar_t* option) {
+    if (option && std::wstring(option) == L"imagesParent") return Layout::ImagesParent;
+    return Layout::Flat;
+}
+
+// Trim surrounding ASCII whitespace from a configured name; when the result is
+// empty, fall back to the documented default so a blank setting can never
+// produce an empty bucket path.
+inline std::wstring NameOrDefault(const std::wstring& raw, const std::wstring& fallback) {
+    std::size_t b = 0, e = raw.size();
+    while (b < e && (raw[b] == L' ' || raw[b] == L'\t')) ++b;
+    while (e > b && (raw[e - 1] == L' ' || raw[e - 1] == L'\t')) --e;
+    std::wstring s = raw.substr(b, e - b);
+    return s.empty() ? fallback : s;
+}
+
+struct Settings {
+    Layout layout = Layout::Flat;
+    std::wstring imagesParentName = L"Images";
+    bool groupSelectedFolders = false;        // move selected folders -> AllFolder
+    std::wstring allFolderName = L"All Folder";
+    bool noExtensionEnabled = true;           // put extensionless files in a bucket
+    std::wstring noExtensionName = L"No Extension";
+    bool isMove = true;                        // Copy/Move for FILES
+};
+
+// One planned file move/copy: a source file routed into a destination directory.
+struct FileOp {
+    std::wstring src;        // source file path
+    std::wstring destDir;    // full destination directory (bucket) path
+    std::wstring bucket;     // the bucket folder name (last path component)
+};
+
+// One planned selected-folder move (only when groupSelectedFolders is on).
+struct FolderOp {
+    std::wstring src;        // selected folder path
+    std::wstring destDir;    // the "All Folder" directory
+};
+
+enum class Skip {
+    None,
+    Rejected,         // bucket name failed sanitization
+    NoExtDisabled,    // extensionless file, No-Extension bucket turned off
+    SelfRecursive,    // folder move would be recursive / into itself
+};
+
+struct SkippedItem {
+    std::wstring path;
+    Skip reason = Skip::None;
+};
+
+struct Plan {
+    DestResult dest;
+    std::vector<FileOp> files;
+    std::vector<FolderOp> folders;
+    std::vector<std::wstring> dirsToCreate;   // deterministic, de-duplicated
+    std::vector<SkippedItem> skipped;
+    bool ok = false;    // true only when the destination resolved
+};
+
+// Resolve the full destination directory for a file bucket under the layout.
+// Image buckets go under <root>\<ImagesParent>\<BUCKET> in ImagesParent mode;
+// everything else (and all buckets in Flat mode) go to <root>\<BUCKET>.
+inline std::wstring BucketDir(const std::wstring& root,
+                              const std::wstring& bucketName,
+                              bool isImage,
+                              const Settings& s) {
+    if (s.layout == Layout::ImagesParent && isImage) {
+        return Join(Join(root, s.imagesParentName), bucketName);
+    }
+    return Join(root, bucketName);
+}
+
+// Build the deterministic Auto Group plan. Pure: no filesystem access. Order is
+// stable -- files keep their captured (first-seen) order and each new
+// destination directory is appended to dirsToCreate the first time it appears.
+inline Plan BuildPlan(const std::vector<SrcItem>& items,
+                      const std::wstring& fixedDest,
+                      const Settings& s) {
+    Plan plan;
+    plan.dest = ResolveAutoDest(items, fixedDest);
+    if (!plan.dest.resolved()) {
+        plan.ok = false;
+        return plan;
+    }
+    const std::wstring root = plan.dest.root;
+
+    // Validate the configured special folder names up-front so a bad config is
+    // reported once rather than per item.
+    SanitizeResult imgSan = SanitizeBucketName(s.imagesParentName);
+    SanitizeResult allSan = SanitizeBucketName(s.allFolderName);
+    SanitizeResult noExtSan = SanitizeBucketName(s.noExtensionName);
+
+    auto addDir = [&](const std::wstring& dir) {
+        for (const auto& d : plan.dirsToCreate) {
+            if (PathEqualCI(d, dir)) return;
+        }
+        plan.dirsToCreate.push_back(dir);
+    };
+
+    for (const auto& it : items) {
+        if (it.isFolder) continue;   // folders handled separately below
+
+        const std::wstring key = CanonicalKey(it.path, false);
+
+        if (key.empty()) {
+            // Extensionless file.
+            if (!s.noExtensionEnabled || !noExtSan.ok) {
+                plan.skipped.push_back({it.path,
+                    noExtSan.ok ? Skip::NoExtDisabled : Skip::Rejected});
+                continue;
+            }
+            const std::wstring dir = Join(root, noExtSan.name);
+            addDir(dir);
+            plan.files.push_back({it.path, dir, noExtSan.name});
+            continue;
+        }
+
+        const std::wstring bucket = Upper(key);
+        SanitizeResult san = SanitizeBucketName(bucket);
+        if (!san.ok) {
+            plan.skipped.push_back({it.path, Skip::Rejected});
+            continue;
+        }
+        const bool img = IsImageKey(key);
+        // In ImagesParent mode an image bucket also needs the parent name valid.
+        if (s.layout == Layout::ImagesParent && img && !imgSan.ok) {
+            plan.skipped.push_back({it.path, Skip::Rejected});
+            continue;
+        }
+        const std::wstring dir = BucketDir(root, san.name, img, s);
+        // Make sure the Images parent itself is created before its children.
+        if (s.layout == Layout::ImagesParent && img) {
+            addDir(Join(root, imgSan.name));
+        }
+        addDir(dir);
+        plan.files.push_back({it.path, dir, san.name});
+    }
+
+    // Selected folders: untouched by default. Only when grouping is enabled do
+    // we move the ORIGINAL captured folders into the All Folder directory. The
+    // generated output buckets above are NEVER moved into All Folder (we only
+    // ever consider items from the immutable captured selection here).
+    if (s.groupSelectedFolders && allSan.ok) {
+        const std::wstring allDir = Join(root, allSan.name);
+        bool anyFolder = false;
+        for (const auto& it : items) {
+            if (!it.isFolder) continue;
+            // Reject a recursive / self move: source folder is the All Folder
+            // target, contains it, or is contained by it.
+            const std::wstring src = TrimSep(it.path);
+            if (PathEqualCI(src, allDir) ||
+                PathEqualCI(src, TrimSep(root)) ||
+                // src is an ancestor of allDir (would move a parent into child)
+                (allDir.size() > src.size() &&
+                 PathEqualCI(allDir.substr(0, src.size()), src) &&
+                 IsSep(allDir[src.size()]))) {
+                plan.skipped.push_back({it.path, Skip::SelfRecursive});
+                continue;
+            }
+            plan.folders.push_back({it.path, allDir});
+            anyFolder = true;
+        }
+        if (anyFolder) addDir(allDir);
+    } else if (s.groupSelectedFolders && !allSan.ok) {
+        for (const auto& it : items) {
+            if (it.isFolder) plan.skipped.push_back({it.path, Skip::Rejected});
+        }
+    }
+
+    plan.ok = true;
+    return plan;
+}
+
+}  // namespace autogroup
 
 // ---- Selected Items list scroll model ----
 // Byte-for-byte mirror of tests/list_scroll_logic.h. Keep in lockstep.
@@ -3039,6 +3728,16 @@ namespace listscroll {
 inline int VisibleRows(int viewportH, int rowH) {
     if (rowH <= 0) return 0;
     return viewportH / rowH;
+}
+// Reconcile the per-mode DECLARED row cap with the TRUE capacity of the live
+// viewport (fix thse isseue.md Phase 1A): never show MORE rows than physically
+// fit (so the last row is never silently clipped), never exceed the declared
+// cap, and fall back to the declared cap when the viewport is not yet
+// measurable (height or rowH is 0) so the list never collapses to zero rows.
+inline int EffectiveVisibleRows(int declaredCap, int viewportH, int rowH) {
+    const int phys = VisibleRows(viewportH, rowH);
+    if (phys <= 0) return declaredCap;
+    return phys < declaredCap ? phys : declaredCap;
 }
 inline int MaxTopRow(int itemCount, int visibleRows) {
     int m = itemCount - visibleRows;
@@ -4422,6 +5121,8 @@ struct NamePromptData {
     bool isGroup = false;                 // this popup is a Group Selection popup
     std::vector<sel::Item> items;         // full selection for the Selected Items panel
     int listTopRow = 0;                   // Selected Items scroll position (top row)
+    int listVisibleRows = 0;              // fix thse isseue.md Phase 1A: TRUE visible-row capacity cached by the owner-draw paint (declared cap reconciled with what the viewport physically fits); 0 until first paint. Wheel/key scrolling pages by THIS so a declared-but-unfit row stays reachable.
+    bool showExt = false;                 // Show-extensions toggle; default OFF (mirrors showext::DefaultOn()): size badge only until turned ON
     std::wstring destPath;                // resolved/desired destination
     std::wstring lastTarget;              // remembered last destination (may be empty)
     std::wstring effectiveDest;           // #2: captured parent for the dest preview (UI only)
@@ -4439,6 +5140,38 @@ struct NamePromptData {
     HWND sizeToggle = nullptr;            // compact/expanded titlebar toggle (id 103, Group only)
     HWND minBtn = nullptr;                // title-bar Minimize (id 104, Group only; #1/#2)
     HWND closeBtn = nullptr;              // title-bar Close (id 105, Group only; #2)
+    // ---- Auto Group (ADD-ON) popup state. Only used for a Group popup when
+    // autoGroupEnabled is on. The button is time-gated by the Phase C countdown
+    // model (agcd::), which is driven by a repaint timer and GetTickCount64().
+    HWND autoGroupBtn = nullptr;          // Auto Group button (id IDC_AUTOGROUP_BTN, Group only)
+    unsigned long long autoGroupStartTick = 0;  // monotonic tick captured when THIS popup opened (fresh per popup)
+    bool autoGroupVisible = false;        // Auto Group button created for this popup (settings-enabled)
+    bool autoGroupRequested = false;      // set true ONLY when the user confirms Auto Group (never by normal Group)
+    // fix thse isseue.md #5: last VISIBLE countdown state. The repaint timer
+    // (id 112) invalidates the Auto Group button ONLY when the whole-second
+    // M:SS label or the enabled/disabled state actually changes -- never once
+    // per tick -- which removes the old 70ms flicker.
+    int autoGroupLastSec = -1;            // last whole-second shown (agcd::RemainingSeconds); -1 = nothing drawn yet
+    bool autoGroupLastEnabled = false;    // last enabled state pushed to EnableWindow()
+    // ---- fix thse isseue.md #2/#3: LIVE summary-chip interaction state (Group
+    // popup only). The chip strip lives in the owner-draw list (id 110); the
+    // painter records each chip's hit rectangle + kind and the strip viewport,
+    // the modal loop hit-tests clicks/wheel against them, and the row renderer
+    // applies the active filter. Stored as primitives because the chipfilter::
+    // / chipmodel:: types are defined LATER in this single-pass TU. These NEVER
+    // touch the real Explorer selection or the Copy/Move/Group plan.
+    int chipFilterKind = 0;               // chipfilter::Kind as int: 0 None,1 Items,2 Folders,3 NoExt,4 Ext
+    std::wstring chipFilterKey;           // normalized ext key when kind==Ext
+    int chipScrollOffset = 0;             // horizontal chip-strip pan (px); INDEPENDENT of listTopRow
+    int chipFocusIndex = -1;              // keyboard-focused chip index (-1 = none)
+    int chipContentW = 0;                 // total chip-strip content width @ last paint (px)
+    int chipViewportW = 0;                // chip-strip viewport width @ last paint (px)
+    RECT chipStripRect = {0, 0, 0, 0};    // chip-strip hit/viewport area in list (id 110) client coords
+    std::vector<RECT> chipHitRects;       // per-chip clickable rect (client coords, already scroll-adjusted)
+    std::vector<int> chipHitKind;         // chipfilter::Kind as int, parallel to chipHitRects
+    std::vector<std::wstring> chipHitKey; // ext key per chip (empty unless Ext), parallel to chipHitRects
+    bool showExtLastPainted = false;      // last showExt state the toggle control reflected
+    RECT chipToggleRect = {0, 0, 0, 0};   // fix thse isseue.md #3: Show-extensions toggle hit rect (list client coords)
 };
 
 // EditParentIsGroup definition (forward-declared above, next to the inputfield
@@ -4586,7 +5319,7 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d) {
     // redraw::kRepaintChildOnMove == false: DeferWindowPos carries no per-move
     // repaint. Group-only children are null on the New Folder popup, so the
     // null-handle skip reproduces the old `isGroup && handle` guards exactly.
-    HDWP hdwp = BeginDeferWindowPos(15);
+    HDWP hdwp = BeginDeferWindowPos(16);
     auto deferMove = [&](HWND h, const auto& r) {
         if (h && hdwp) {
             hdwp = DeferWindowPos(hdwp, h, nullptr,
@@ -4604,6 +5337,7 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d) {
     deferMove(d->segMoveBtn,  L.segMove);
     deferMove(d->createBtn,   L.createButton);
     deferMove(d->cancelBtn,   L.cancelButton);
+    deferMove(d->autoGroupBtn, L.autoGroupButton);  // ADD-ON: keep the Auto Group button aligned on relayout
     // fix thse isseu e.md #5: the size control stays in the tested chrome rect
     // so relayout can't drift it back onto the Selected Items card.
     deferMove(d->sizeToggle,  L.chromeSizeBtn);
@@ -4860,6 +5594,407 @@ inline unsigned SoftBorder(const Chip& c) {
 }
 
 }  // namespace badgecolor
+
+// ---- Summary chip strip + toolbar + filter models ----
+// (fix thse isseue.md #2/#3/#4/#5/#6). Byte-for-byte mirrors of the tests/
+// logic headers so the live popup and the unit tests share one source of
+// truth. Keep each namespace in lockstep with its tests/*_logic.h.
+
+// Byte-for-byte mirror of tests/chip_model_logic.h.
+namespace chipmodel {
+
+enum class Kind { Items, Folders, Ext, NoExt };
+
+struct Chip {
+    Kind kind = Kind::Items;
+    std::wstring label;    // fully composed display text, e.g. "9 items", "3 MD"
+    std::size_t count = 0;
+    std::wstring extKey;   // normalized lowercase ext key ("md"); empty otherwise
+};
+
+// Lowercase + strip a single leading dot. "MD"/".md"/"Md" -> "md".
+inline std::wstring NormExtKey(const std::wstring& extLabel) {
+    std::wstring e = extLabel;
+    std::size_t start = (!e.empty() && e[0] == L'.') ? 1u : 0u;
+    std::wstring out;
+    for (std::size_t i = start; i < e.size(); ++i) {
+        wchar_t c = e[i];
+        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Uppercase a normalized key for display. "md" -> "MD".
+inline std::wstring UpperExt(const std::wstring& key) {
+    std::wstring out;
+    for (wchar_t c : key) {
+        if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - L'a' + L'A');
+        out.push_back(c);
+    }
+    return out;
+}
+
+// Build the ordered chip list from the current selection. Order: items chip,
+// a folders chip (only when folders exist), then one chip per unique file
+// extension in first-seen order, with extensionless files collapsed into a
+// single "No extension" chip in their first-seen position.
+inline std::vector<Chip> Build(const std::vector<sel::Item>& items) {
+    const std::size_t total = items.size();
+    std::size_t folders = 0;
+    for (const auto& it : items) if (it.isFolder) ++folders;
+
+    std::vector<Chip> out;
+    {
+        Chip c;
+        c.kind = Kind::Items;
+        c.count = total;
+        c.label = std::to_wstring(total) + L" " + (total == 1 ? L"item" : L"items");
+        out.push_back(c);
+    }
+    if (folders > 0) {
+        Chip c;
+        c.kind = Kind::Folders;
+        c.count = folders;
+        c.label = std::to_wstring(folders) + L" " +
+                  (folders == 1 ? L"folder" : L"folders");
+        out.push_back(c);
+    }
+
+    std::vector<std::wstring> keys;   // first-seen order; "" == no extension
+    std::vector<std::size_t>  counts;
+    for (const auto& it : items) {
+        if (it.isFolder) continue;
+        const std::wstring key = NormExtKey(sel::ExtLabel(it.name, false));
+        std::size_t idx = keys.size();
+        for (std::size_t i = 0; i < keys.size(); ++i) {
+            if (keys[i] == key) { idx = i; break; }
+        }
+        if (idx == keys.size()) { keys.push_back(key); counts.push_back(1); }
+        else ++counts[idx];
+    }
+    for (std::size_t i = 0; i < keys.size(); ++i) {
+        Chip c;
+        c.count = counts[i];
+        if (keys[i].empty()) {
+            c.kind = Kind::NoExt;
+            c.label = std::to_wstring(counts[i]) + L" No extension";
+        } else {
+            c.kind = Kind::Ext;
+            c.extKey = keys[i];
+            c.label = std::to_wstring(counts[i]) + L" " + UpperExt(keys[i]);
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
+}  // namespace chipmodel
+
+// ---- Selected Items SUMMARY-CHIP geometry model (ADD-ON) ----
+// Byte-for-byte mirror of tests/sum_chip_logic.h. fix thse isseue.md #1:
+// DEDICATED pill design (semibold 12px text, 8x4 padding, pill radius >=10px,
+// 6px gaps) with a height DERIVED from measured text metrics -- NOT the
+// per-file listbadge constants and NOT the old hardcoded 16px height. Pure; the
+// painter DPI-scales each token via ScaleDpi and feeds measured text extents in.
+namespace sumchip {
+inline constexpr int kFontPx    = 12;  // semibold ~600 (UiFontSemibold helper)
+inline constexpr int kPadX      = 8;   // horizontal padding per side
+inline constexpr int kPadY      = 4;   // vertical padding per side
+inline constexpr int kMinRadius = 10;  // minimum corner radius
+inline constexpr int kGap       = 6;   // gap between adjacent chips
+inline constexpr int kTitleGap  = 6;   // gap between the title row and chip row
+inline int ChipHeight(int textH, int padY) { return textH + padY * 2; }
+inline int ChipWidth(int textW, int padX) { return textW + padX * 2; }
+inline int ChipRadius(int chipH, int minRadius) {
+    const int r = chipH / 2;
+    return (r < minRadius) ? minRadius : r;
+}
+inline int NextChipX(int x, int chipW, int gap) { return x + chipW + gap; }
+}  // namespace sumchip
+
+// Byte-for-byte mirror of tests/show_ext_logic.h.
+namespace showext {
+
+// The toggle starts OFF; sizes are the default per-row metadata.
+inline bool DefaultOn() { return false; }
+
+// The toolbar action label.
+inline const wchar_t* ToggleLabel() { return L"Show extensions"; }
+
+// A size badge is shown for files with a known size; never for folders.
+inline bool RowShowsSize(bool isFolder, bool sizeKnown) {
+    return !isFolder && sizeKnown;
+}
+
+// When the toggle is ON, a file row renders its COMPLETE filename inline
+// (e.g. "README.md") instead of the stem; a separate extension pill is NEVER
+// drawn. Folders are never affected (always their whole name, no suffix).
+inline bool RowShowsExtInline(bool toggleOn, bool isFolder) {
+    return toggleOn && !isFolder;
+}
+
+// ---- Compact ON/OFF switch (fix thse isseue.md Phase 3) ----
+// The toolbar control is a small theme-aware switch with NO inline text label.
+// This is the accessible name used for the tooltip + assistive technology (the
+// visible text label is gone, so the control still announces its purpose).
+inline const wchar_t* AccessibleName() { return L"Show file extensions"; }
+
+// Switch geometry (unit-agnostic; the renderer passes device px). The switch is
+// a 2:1 rounded "pill" track; the knob is a circle inset by `inset` on all
+// sides and sits at the LEFT when OFF and the RIGHT when ON. No space is ever
+// reserved for a text label.
+inline int SwitchTrackW(int trackH) { return trackH * 2; }
+inline int SwitchKnobDiameter(int trackH, int inset) {
+    const int d = trackH - inset * 2;
+    return d < 1 ? 1 : d;
+}
+inline int SwitchKnobLeft(int trackLeft, int trackW, int trackH, int inset,
+                          bool on) {
+    const int d = SwitchKnobDiameter(trackH, inset);
+    return on ? (trackLeft + trackW - inset - d) : (trackLeft + inset);
+}
+
+}  // namespace showext
+
+// Byte-for-byte mirror of tests/chip_scroll_logic.h.
+namespace chipscroll {
+
+// Largest horizontal offset: how far the content extends past the viewport.
+inline int MaxOffset(int contentW, int viewportW) {
+    const int m = contentW - viewportW;
+    return m > 0 ? m : 0;
+}
+
+// Scrolling is only possible/needed when the chips overflow the viewport.
+inline bool NeedsScroll(int contentW, int viewportW) {
+    return contentW > viewportW;
+}
+
+// Keep an offset within [0, maxOffset].
+inline int Clamp(int offset, int maxOffset) {
+    if (offset < 0) return 0;
+    if (offset > maxOffset) return maxOffset;
+    return offset;
+}
+
+// Mouse wheel -> horizontal pan. Positive wheelDelta (wheel away from the user)
+// pans toward the start (offset 0), matching the vertical list convention.
+inline int OnWheel(int offset, int wheelDelta, int maxOffset, int pxPerNotch) {
+    const int notches = wheelDelta / 120;
+    offset -= notches * pxPerNotch;
+    return Clamp(offset, maxOffset);
+}
+
+// WM_MOUSEHWHEEL / tilt wheels use the OPPOSITE sign of WM_MOUSEWHEEL (positive
+// means pan right). Normalize a horizontal-wheel delta to the OnWheel sign.
+inline int WheelDeltaFromHorizontal(int hwheelDelta) { return -hwheelDelta; }
+
+// Smallest offset change that brings [chipLeft, chipRight) fully into view.
+inline int BringIntoView(int chipLeft, int chipRight, int offset, int viewportW) {
+    if (chipLeft < offset) return chipLeft;
+    if (chipRight > offset + viewportW) return chipRight - viewportW;
+    return offset;
+}
+
+// Keyboard navigation across the chips; returns the clamped active index.
+enum class Key { Left, Right, Home, End };
+inline int OnKey(Key k, int activeIndex, int chipCount) {
+    if (chipCount <= 0) return 0;
+    switch (k) {
+        case Key::Left:  activeIndex -= 1; break;
+        case Key::Right: activeIndex += 1; break;
+        case Key::Home:  activeIndex = 0; break;
+        case Key::End:   activeIndex = chipCount - 1; break;
+    }
+    if (activeIndex < 0) return 0;
+    if (activeIndex > chipCount - 1) return chipCount - 1;
+    return activeIndex;
+}
+
+}  // namespace chipscroll
+
+// Byte-for-byte mirror of tests/chip_toolbar_logic.h.
+namespace chiptoolbar {
+
+struct Box {
+    int left = 0, top = 0, right = 0, bottom = 0;
+    int w() const { return right - left; }
+    int h() const { return bottom - top; }
+};
+
+struct Layout {
+    bool wrapped = false;   // true -> toolbar moved to a second row
+    int  rows = 1;
+    Box  strip;             // chip-strip viewport
+    Box  toolbar;           // region holding the action buttons
+};
+
+// Lay out the summary row in [left,top,right,bottom]. toolbarW is the total
+// width the toolbar buttons need (including their internal gaps), gap is the
+// space between the strip and the toolbar, minStripW is the smallest usable
+// chip-strip width, and rowH is the height of one summary row. The strip takes
+// the remaining width on a single row when it stays >= minStripW; otherwise the
+// toolbar wraps below the strip.
+inline Layout Compute(int left, int top, int right, int bottom,
+                      int toolbarW, int gap, int minStripW, int rowH) {
+    Layout out;
+    const int singleStripW = (right - left) - toolbarW - gap;
+    if (singleStripW >= minStripW) {
+        out.wrapped = false;
+        out.rows = 1;
+        out.strip = Box{left, top, left + singleStripW, bottom};
+        out.toolbar = Box{left + singleStripW + gap, top, right, bottom};
+    } else {
+        out.wrapped = true;
+        out.rows = 2;
+        out.strip = Box{left, top, right, top + rowH};
+        out.toolbar = Box{left, top + rowH, right, top + rowH + rowH};
+    }
+    return out;
+}
+
+// Place buttons left-to-right inside the toolbar box in order (Show extensions
+// first, future actions after). Returns one box per width.
+inline std::vector<Box> ButtonBoxes(const Box& toolbar,
+                                    const std::vector<int>& widths, int gap) {
+    std::vector<Box> out;
+    int x = toolbar.left;
+    for (std::size_t i = 0; i < widths.size(); ++i) {
+        out.push_back(Box{x, toolbar.top, x + widths[i], toolbar.bottom});
+        x += widths[i] + gap;
+    }
+    return out;
+}
+
+}  // namespace chiptoolbar
+
+// Byte-for-byte mirror of tests/chip_filter_logic.h.
+namespace chipfilter {
+
+enum class Row { Normal, Matched, Subdued };
+
+// Which chip is the single active filter. fix thse isseue.md #2: besides the
+// per-extension chips, the Items chip restores the all-items view, the Folders
+// chip highlights folder rows, and the No-extension chip highlights
+// extensionless files. At most ONE is active at a time.
+enum class Kind { None, Items, Folders, NoExt, Ext };
+
+struct State {
+    std::wstring activeKey;   // normalized lowercase ext key when kind==Ext; else empty
+    Kind kind = Kind::None;
+    // "Active" means a highlight is applied: None and the Items (all-items
+    // view) chip are NOT highlighting states.
+    bool active() const { return kind != Kind::None && kind != Kind::Items; }
+};
+
+// The Items chip: restore the all-items view (no row is subdued).
+inline void ActivateItems(State& s) { s.kind = Kind::Items; s.activeKey.clear(); }
+
+// The Folders chip: highlight the selected folder rows.
+inline void ActivateFolders(State& s) { s.kind = Kind::Folders; s.activeKey.clear(); }
+
+// The No-extension chip: highlight files that have no extension.
+inline void ActivateNoExt(State& s) { s.kind = Kind::NoExt; s.activeKey.clear(); }
+
+// Click an extension chip. A non-empty key becomes the single active ext
+// filter, replacing any previous one; clicking the active key again leaves it
+// active. An empty key is not an extension filter and does nothing.
+inline void ActivateExt(State& s, const std::wstring& key) {
+    if (key.empty()) return;
+    s.kind = Kind::Ext;
+    s.activeKey = key;
+}
+
+// Backward-compatible shorthand: Activate(key) == ActivateExt(key).
+inline void Activate(State& s, const std::wstring& key) { ActivateExt(s, key); }
+
+// The explicit reset: a deliberate click outside the chip strip.
+inline void ClickOutside(State& s) {
+    s.kind = Kind::None;
+    s.activeKey.clear();
+}
+
+// Per-row highlight state. Normal for every row when no highlight is active
+// (None / Items); otherwise the rows that match the active chip are Matched and
+// every other row is Subdued (never reordered or removed).
+inline Row RowFor(const State& s, const std::wstring& rowExtKey, bool isFolder) {
+    switch (s.kind) {
+        case Kind::None:
+        case Kind::Items:   return Row::Normal;
+        case Kind::Folders: return isFolder ? Row::Matched : Row::Subdued;
+        case Kind::NoExt:
+            return (!isFolder && rowExtKey.empty()) ? Row::Matched : Row::Subdued;
+        case Kind::Ext:
+            return (!isFolder && rowExtKey == s.activeKey) ? Row::Matched
+                                                           : Row::Subdued;
+    }
+    return Row::Normal;
+}
+
+// fix thse isseue.md Phase 2A: the ACTIVE chip is indicated ONLY by a dotted
+// outline (the existing focus/selection styling), never by a second accent fill
+// overlay -- the chip keeps its muted/per-ext fill in every state. A chip draws
+// the dotted outline when it is the active filter OR the keyboard-focused chip.
+// Keyboard focus and active-filter state stay logically distinct (two inputs)
+// even though they share the one compatible dotted-outline style.
+inline bool ChipShowsDottedOutline(bool isActiveFilter, bool isFocused) {
+    return isActiveFilter || isFocused;
+}
+
+}  // namespace chipfilter
+
+// fix thse isseue.md #2: bridge the PRIMITIVE chip-filter state stored on
+// NamePromptData (defined earlier in this single-pass TU, so it cannot name the
+// chipfilter:: types) to/from the tested chipfilter::State model. The model
+// stays the single source of truth for the highlight decision.
+static chipfilter::State ChipStateFrom(const NamePromptData* d) {
+    chipfilter::State s;
+    s.kind = static_cast<chipfilter::Kind>(d->chipFilterKind);
+    s.activeKey = d->chipFilterKey;
+    return s;
+}
+static void ChipStateInto(NamePromptData* d, const chipfilter::State& s) {
+    d->chipFilterKind = static_cast<int>(s.kind);
+    d->chipFilterKey = s.activeKey;
+}
+
+// ---- filesystem size-on-disk resolver (fix thse isseue.md #1) ----
+// Resolve a file's size for the Selected Items badge WITHOUT opening or reading
+// its contents -- a metadata-only query. Prefers the size ON DISK (allocated
+// bytes via GetCompressedFileSizeW) and falls back to the logical length
+// (GetFileAttributesExW) when allocation is unavailable. Folders, reparse
+// points, empty paths and any metadata failure resolve to -1 ("unknown") so the
+// row simply shows no size badge; it never throws or blocks the UI. Called only
+// when the selection/model changes (capture), never from a paint handler.
+static long long ResolveFileSizeOnDisk(const std::wstring& path) {
+    if (path.empty()) return -1;
+
+    long long logical = -1;
+    WIN32_FILE_ATTRIBUTE_DATA fad = {};
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad)) {
+        if (fad.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            return -1;  // folders never show a size badge
+        }
+        logical = (static_cast<long long>(fad.nFileSizeHigh) << 32) |
+                  static_cast<unsigned long>(fad.nFileSizeLow);
+        // Reparse points (symlinks / junctions) can target slow or absent
+        // locations; keep the logical length and skip the allocation query.
+        if (fad.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            return logical;
+        }
+    }
+
+    long long allocated = -1;
+    DWORD hi = 0;
+    const DWORD lo = GetCompressedFileSizeW(path.c_str(), &hi);
+    if (lo != INVALID_FILE_SIZE || GetLastError() == NO_ERROR) {
+        allocated = (static_cast<long long>(hi) << 32) |
+                    static_cast<unsigned long>(lo);
+    }
+
+    return sel::ChooseSizeBytes(logical, allocated);
+}
 
 // ---- real Windows Shell icon layer for file/folder ROWS (fix #9) ----
 // Byte-for-byte mirror of tests/shell_icon_logic.h. The Selected Items rows
@@ -5844,6 +6979,39 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                             reinterpret_cast<HMENU>(IDCANCEL), hinst, nullptr);
             if (d) { d->createBtn = ok; d->cancelBtn = cancel; }  // Phase 7 relayout targets
 
+            // ADD-ON (Phase D): the timed Auto Group button, LEFT of Group, is
+            // created ONLY for a Group popup and ONLY when enabled in settings.
+            // Owner-draw id 120, same style as Create/Cancel. A fresh monotonic
+            // start tick (GetTickCount64) is captured per popup, and a repaint
+            // timer (id 112, ~100ms) refreshes the once-per-second M:SS
+            // countdown. The countdown merely ENABLES the button; it never runs
+            // the op.
+            if (d && d->isGroup && AtomicGet(&g_autoGroupEnabled) != 0) {
+                HWND autoBtn = CreateWindowExW(0, L"BUTTON", L"Auto Group",
+                                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+                                S(L.autoGroupButton.x), S(L.autoGroupButton.y),
+                                S(L.autoGroupButton.w), S(L.autoGroupButton.h), hwnd,
+                                reinterpret_cast<HMENU>(120), hinst, nullptr);
+                d->autoGroupBtn = autoBtn;
+                d->autoGroupVisible = (autoBtn != nullptr);
+                d->autoGroupStartTick = GetTickCount64();
+                if (autoBtn) {
+                    SendMessageW(autoBtn, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+                    // fix thse isseue.md #5: the button opens in the Waiting
+                    // state, so DISABLE it for real -- EnableWindow(FALSE) blocks
+                    // both mouse clicks and keyboard activation at the OS level
+                    // until the 5s delay genuinely elapses. The WM_COMMAND and
+                    // worker-side agcd::Clickable checks stay as a second guard.
+                    // The repaint timer (id 112) only drives a once-per-second
+                    // M:SS label refresh now (no 70ms flicker), so 100ms is
+                    // plenty to catch each whole-second boundary promptly.
+                    EnableWindow(autoBtn, FALSE);
+                    d->autoGroupLastSec = -1;
+                    d->autoGroupLastEnabled = false;
+                    SetTimer(hwnd, 112, 100, nullptr);
+                }
+            }
+
             SendMessageW(label, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
             SendMessageW(d->edit, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
             SendMessageW(ok, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
@@ -5890,6 +7058,46 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     if (d->glideProgress == target) KillTimer(hwnd, 110);
                 } else {
                     KillTimer(hwnd, 110);
+                }
+                return 0;
+            }
+            // ADD-ON (Phase D): the Auto Group countdown repaint tick. Recompute
+            // the state from the MONOTONIC clock each tick (never a tick count),
+            // so a stalled/busy loop or a late WM_TIMER cannot unlock early or
+            // late. We only repaint the button; the owner-draw reads the same
+            // agcd:: model. Once the button is Enabled we stop the timer -- its
+            // label is then static. We never run the operation here.
+            if (wParam == 112) {
+                if (d && d->autoGroupBtn) {
+                    const bool en = AtomicGet(&g_autoGroupEnabled) != 0;
+                    const ULONGLONG now = GetTickCount64();
+                    const agcd::State st =
+                        agcd::Resolve(en, d->autoGroupStartTick, now);
+                    const int secs =
+                        agcd::RemainingSeconds(en, d->autoGroupStartTick, now);
+                    const bool nowEnabled = (st == agcd::State::Enabled);
+                    // fix thse isseue.md Phase 4: repaint ONLY when the visible
+                    // whole-second M:SS label OR the enabled/disabled state
+                    // actually changes -- never once per tick. The decision is
+                    // the unit-tested agcd::ShouldRepaint model, so the
+                    // anti-flicker contract cannot silently regress.
+                    if (agcd::ShouldRepaint(secs, d->autoGroupLastSec,
+                                            nowEnabled, d->autoGroupLastEnabled)) {
+                        d->autoGroupLastSec = secs;
+                        if (nowEnabled != d->autoGroupLastEnabled) {
+                            d->autoGroupLastEnabled = nowEnabled;
+                            // Flip the REAL disabled state so clicks/keys unlock
+                            // exactly at expiry (monotonic-clock driven).
+                            EnableWindow(d->autoGroupBtn,
+                                         nowEnabled ? TRUE : FALSE);
+                        }
+                        InvalidateRect(d->autoGroupBtn, nullptr, FALSE);
+                    }
+                    // Once Enabled the label is static -- stop the timer so no
+                    // further ticks arrive.
+                    if (st != agcd::State::Waiting) KillTimer(hwnd, 112);
+                } else {
+                    KillTimer(hwnd, 112);
                 }
                 return 0;
             }
@@ -6059,7 +7267,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                   // are contiguous (was clipped to the middle Expand).
                                   ScaleDpi(L.chromeMinBtn.x, cdpi) - ScaleDpi(6, cdpi),
                                   bandH};
-                    DrawTextW(hdc, L"📂 Group into folder", -1, &tText,
+                    DrawTextW(hdc, L"\U0001F4C2 Group into folder", -1, &tText,
                               DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
                     SelectObject(hdc, oldTitleF);
                 }
@@ -6488,7 +7696,13 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 HGDIOBJ oldFont = SelectObject(hdc, UiFont(dpi));
 
                 const int left  = rc.left;   // #3: 16px inset is the selectedContent rect, not here
-                const int right = rc.right;  // #3: full content width (16px from each card edge)
+                // fix thse isseue.md #4: the inner list content stops a dedicated
+                // right inset short of the child's right edge, so rows, the
+                // size/extension metadata, chip clipping, the divider endpoint and
+                // the scrollbar track all keep balanced breathing room from the
+                // card border. Applied ONCE here (the 20px card inset lives in the
+                // layout -- no double padding on the outer card).
+                const int right = rc.right - S(layout::kSelListRightInset);  // #4: inner right inset
                 const int rowH  = S(24);
                 // fix thse isseue.md #1: EVEN "breathing space" rhythm for the
                 // Selected header -- air after the band, equal gaps between the
@@ -6514,7 +7728,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 {
                     RECT selIcoR = {left, y, left + S(layout::kSectionIconCol),
                                     y + rowH};
-                    DrawTextW(hdc, L"🗂️", -1, &selIcoR,
+                    DrawTextW(hdc, L"\U0001F5C2\uFE0F", -1, &selIcoR,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
                 }
                 std::wstring title = sel::SummaryTitle(d->items.size());
@@ -6527,16 +7741,230 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                           DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
                 SelectObject(hdc, semiSel);
                 y += rowH;
-                y += kSelHdrGap;   // even breathing: title -> type breakdown
+                y += S(layout::kSelTitleChipGap);   // fix thse isseue.md #1: 6px title -> chip row
 
-                // Level 2 -- actionable type breakdown (secondary weight/colour,
-                // fix thse isseu e.md #11): "N items - 3 MP3 - 1 JPG - 125 MB".
-                SetTextColor(hdc, secondary);
-                std::wstring counts = sel::TypeBreakdown(d->items);
-                const int countsH = S(16);
-                RECT cnr = {left, y, right, y + countsH};
-                DrawTextW(hdc, counts.c_str(), -1, &cnr,
-                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                // Level 2 -- the interactive summary chip strip (fix thse
+                // isseue.md #2/#3): the plain-text sel::TypeBreakdown summary is
+                // REPLACED by dynamic metadata chips built from the LIVE
+                // selection -- [N items] [N folders] [N EXT]... Ext chips reuse
+                // the tested per-extension badgecolor table; items/folders use
+                // the muted neutral chip token. The band height is UNCHANGED so
+                // the divider and rows below keep their positions; overflow past
+                // the card edge is clipped (wheel-pan / filtering have their own
+                // tested models).
+                const std::vector<chipmodel::Chip> sumChips =
+                    chipmodel::Build(d->items);
+                // fix thse isseue.md #1: DEDICATED summary-chip pill design via
+                // sumchip:: -- semibold 12px text, 8x4 padding, pill radius
+                // (>=10px), 6px gaps, border == fill (one device-pixel stroke,
+                // no visible second outline), and a height DERIVED from the
+                // measured text metrics (NEVER a hardcoded 16). Items/folders use
+                // the muted neutral chip token with strong near-black/off-white
+                // text; ext chips keep the restrained per-extension tint.
+                const int chipPadX = S(sumchip::kPadX);
+                const int chipPadY = S(sumchip::kPadY);
+                const int chipGap  = S(sumchip::kGap);
+                HGDIOBJ chipFont = SelectObject(hdc, UiFontSemibold(dpi));
+                int chipTextH = 0;
+                {
+                    SIZE hx = {0, 0};
+                    // A representative cap+descender cell so every chip shares
+                    // one height regardless of its own glyphs.
+                    GetTextExtentPoint32W(hdc, L"Ag", 2, &hx);
+                    chipTextH = hx.cy;
+                }
+                const int chipH   = sumchip::ChipHeight(chipTextH, chipPadY);
+                const int chipRad = sumchip::ChipRadius(chipH, S(sumchip::kMinRadius));
+                const int countsH = chipH;   // reserved band tracks the pill height
+                const int chipTop = y;       // chips sit at the top of the band
+                // fix thse isseue.md #2/#3: the strip is a horizontally-scrolled,
+                // clickable viewport [left,right]. Record the viewport + each
+                // chip's hit rect (clipped to the viewport, scroll-adjusted) in
+                // the list's client coords so the modal loop can hit-test clicks
+                // and route the horizontal wheel. The active chip (chipfilter::)
+                // gets a stronger-but-restrained accent; a clipped/offscreen chip
+                // registers no clickable area. Dimensions NEVER change on state.
+                const chipfilter::State chipState = ChipStateFrom(d);
+                // fix thse isseue.md #3: reserve the toolbar region (Show
+                // extensions toggle) at the right via the tested chiptoolbar::
+                // model, so the chip strip viewport is the remaining width and
+                // the toggle keeps a stable 12px gap from the strip. Future
+                // toolbar actions (Grid view, Larger icons) slot beside it.
+                // fix thse isseue.md Phase 3: the toolbar reserves ONLY the
+                // compact switch width (a 2:1 pill from the tested showext::
+                // model) -- NO space is reserved for a text label anymore.
+                const int toggleW = showext::SwitchTrackW(chipH);
+                const int toolbarGap = S(12);
+                const chiptoolbar::Layout tbar = chiptoolbar::Compute(
+                    left, chipTop, right, chipTop + chipH,
+                    toggleW, toolbarGap, chipH * 3, chipH);
+                const int stripRight = tbar.strip.right;
+                d->chipToggleRect = RECT{tbar.toolbar.left, tbar.toolbar.top,
+                                         tbar.toolbar.right, tbar.toolbar.bottom};
+                d->chipStripRect = RECT{left, chipTop, stripRight, chipTop + chipH};
+                d->chipViewportW = stripRight - left;
+                d->chipHitRects.clear();
+                d->chipHitKind.clear();
+                d->chipHitKey.clear();
+                const int savedClip = SaveDC(hdc);
+                IntersectClipRect(hdc, left, chipTop, stripRight, chipTop + chipH + 1);
+                int chipX = left - d->chipScrollOffset;
+                int chipIndex = 0;
+                for (const chipmodel::Chip& ck : sumChips) {
+                    SIZE cts = {0, 0};
+                    GetTextExtentPoint32W(hdc, ck.label.c_str(),
+                                          static_cast<int>(ck.label.size()), &cts);
+                    const int cw = sumchip::ChipWidth(cts.cx, chipPadX);
+                    const int chipLeft  = chipX;
+                    const int chipRight = chipX + cw;
+                    // chipfilter kind/key for THIS chip (int mirrors chipfilter::
+                    // Kind: 1 Items, 2 Folders, 3 NoExt, 4 Ext).
+                    int fKind = 1;
+                    std::wstring fKey;
+                    if (ck.kind == chipmodel::Kind::Folders)   fKind = 2;
+                    else if (ck.kind == chipmodel::Kind::NoExt) fKind = 3;
+                    else if (ck.kind == chipmodel::Kind::Ext) { fKind = 4; fKey = ck.extKey; }
+                    // Visible (clipped) hit rect; a fully-offscreen chip gets an
+                    // empty rect so a clipped part can never be clicked.
+                    const int visL = chipLeft < left ? left : chipLeft;
+                    const int visR = chipRight > stripRight ? stripRight : chipRight;
+                    if (visR > visL) {
+                        d->chipHitRects.push_back(RECT{visL, chipTop, visR, chipTop + chipH});
+                    } else {
+                        d->chipHitRects.push_back(RECT{0, 0, 0, 0});
+                    }
+                    d->chipHitKind.push_back(fKind);
+                    d->chipHitKey.push_back(fKey);
+                    RECT chipR = {chipLeft, chipTop, chipRight, chipTop + chipH};
+                    // Default (Items/Folders/No extension): muted neutral fill
+                    // with strong primary text; ext chips get the per-ext tint.
+                    COLORREF cFill = pal.badgeFill;
+                    COLORREF cText = pal.panelText;
+                    if (ck.kind == chipmodel::Kind::Ext && !ck.extKey.empty()) {
+                        const badgecolor::Chip cc =
+                            badgecolor::ChipForLabel(ck.extKey, dark);
+                        if (!cc.inherit) {
+                            cFill = RGB((cc.fill >> 16) & 0xFF,
+                                        (cc.fill >> 8) & 0xFF, cc.fill & 0xFF);
+                            cText = RGB((cc.ink >> 16) & 0xFF,
+                                        (cc.ink >> 8) & 0xFF, cc.ink & 0xFF);
+                        }
+                    }
+                    // fix thse isseue.md Phase 2A: the ACTIVE filter chip keeps
+                    // its muted / per-ext fill -- it is NEVER nudged toward the
+                    // Create accent. The dotted outline below is the only
+                    // selected-chip indicator, so clicking a chip no longer
+                    // layers a second heavy accent fill over it.
+                    const bool chipActive =
+                        chipState.active() &&
+                        static_cast<int>(chipState.kind) == fKind &&
+                        (fKind != 4 || chipState.activeKey == fKey);
+                    // Border is the SAME color as the fill (one device-pixel
+                    // edge, no visible second outline).
+                    const COLORREF cBorder = cFill;
+                    const RECT chipAA = {chipR.left, chipR.top, chipR.right,
+                                         chipR.bottom};
+                    if (!DrawRoundSurfaceAA(hdc, chipAA, aarender::Surface::Badge,
+                                            chipRad, cFill, true, cBorder, 1)) {
+                        HBRUSH cbh = CreateSolidBrush(cFill);
+                        HPEN   cph = CreatePen(PS_SOLID, 1, cBorder);
+                        HGDIOBJ ocb = SelectObject(hdc, cbh);
+                        HGDIOBJ ocp = SelectObject(hdc, cph);
+                        RoundRect(hdc, chipR.left, chipR.top, chipR.right,
+                                  chipR.bottom, chipRad, chipRad);
+                        SelectObject(hdc, ocb);
+                        SelectObject(hdc, ocp);
+                        DeleteObject(cbh);
+                        DeleteObject(cph);
+                    }
+                    // fix thse isseue.md Phase 2A: a dotted outline marks BOTH
+                    // the ACTIVE filter chip and the keyboard-focused chip (the
+                    // one selected-chip indicator), via the tested chipfilter::
+                    // model, using the existing focus/selection colour -- no
+                    // second fill, no permanent outline on inactive chips.
+                    if (chipfilter::ChipShowsDottedOutline(
+                            chipActive, chipIndex == d->chipFocusIndex)) {
+                        HPEN fpen = CreatePen(PS_DOT, 1, pal.createFill);
+                        HGDIOBJ ofp = SelectObject(hdc, fpen);
+                        HGDIOBJ ofb = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                        RoundRect(hdc, chipR.left, chipR.top, chipR.right,
+                                  chipR.bottom, chipRad, chipRad);
+                        SelectObject(hdc, ofb);
+                        SelectObject(hdc, ofp);
+                        DeleteObject(fpen);
+                    }
+                    SetTextColor(hdc, cText);
+                    RECT ctr = {chipR.left, chipR.top, chipR.right, chipR.bottom};
+                    DrawTextW(hdc, ck.label.c_str(), -1, &ctr,
+                              DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                    chipX += cw + chipGap;
+                    ++chipIndex;
+                }
+                // Total content width (last chip's right edge minus the trailing
+                // gap, measured from the unscrolled strip start) -> drives the
+                // horizontal scroll clamp (chipscroll::).
+                d->chipContentW = (chipX - chipGap) - (left - d->chipScrollOffset);
+                RestoreDC(hdc, savedClip);
+                // fix thse isseue.md Phase 3: the compact Show-extensions
+                // switch, immediately after the chip-strip viewport. Default
+                // OFF; ON drives the Phase 1B inline-filename rendering. It is a
+                // small unlabeled ON/OFF switch (track + sliding knob) that
+                // keeps a STABLE size as the state flips (never resizes on click).
+                {
+                    // fix thse isseue.md Phase 3: a COMPACT theme-aware ON/OFF
+                    // switch with NO inline text label (the old check-box glyph
+                    // + "Show extensions" text are gone). OFF = neutral track,
+                    // knob LEFT; ON = accent track, knob RIGHT. The accessible
+                    // name (showext::AccessibleName()) is the tooltip / assistive
+                    // label since there is no visible text. Geometry comes from
+                    // the tested showext:: switch model; the control keeps a
+                    // STABLE size as the state flips.
+                    const wchar_t* toggleAccName = showext::AccessibleName();
+                    (void)toggleAccName;  // tooltip / UIA label (live Win32 build)
+                    const RECT tr2 = d->chipToggleRect;
+                    const bool on = d->showExt;
+                    const int trackH = tr2.bottom - tr2.top;
+                    const int trackW = tr2.right - tr2.left;
+                    const int swInset = S(2);
+                    const COLORREF trackFill = on
+                        ? RGB(hovertint::BlendChannel(GetRValue(pal.badgeFill), GetRValue(pal.createFill), 60),
+                              hovertint::BlendChannel(GetGValue(pal.badgeFill), GetGValue(pal.createFill), 60),
+                              hovertint::BlendChannel(GetBValue(pal.badgeFill), GetBValue(pal.createFill), 60))
+                        : pal.badgeFill;
+                    const RECT tAA = {tr2.left, tr2.top, tr2.right, tr2.bottom};
+                    if (!DrawRoundSurfaceAA(hdc, tAA, aarender::Surface::Badge,
+                                            trackH, trackFill, true, trackFill, 1)) {
+                        HBRUSH tb = CreateSolidBrush(trackFill);
+                        HGDIOBJ otb = SelectObject(hdc, tb);
+                        RoundRect(hdc, tr2.left, tr2.top, tr2.right, tr2.bottom,
+                                  trackH, trackH);
+                        SelectObject(hdc, otb);
+                        DeleteObject(tb);
+                    }
+                    // The sliding knob: a circle at the tested position (LEFT
+                    // when OFF, RIGHT when ON) -- the only state indicator, no
+                    // text. A 1px border defines it against the track.
+                    const int knobD = showext::SwitchKnobDiameter(trackH, swInset);
+                    const int knobL = showext::SwitchKnobLeft(tr2.left, trackW,
+                                                              trackH, swInset, on);
+                    const int knobT = tr2.top + swInset;
+                    const RECT knobR = {knobL, knobT, knobL + knobD, knobT + knobD};
+                    if (!DrawRoundSurfaceAA(hdc, knobR, aarender::Surface::Badge,
+                                            knobD, pal.cardBg, true, pal.cardBorder, 1)) {
+                        HBRUSH kb = CreateSolidBrush(pal.cardBg);
+                        HPEN   kp = CreatePen(PS_SOLID, 1, pal.cardBorder);
+                        HGDIOBJ okb = SelectObject(hdc, kb);
+                        HGDIOBJ okp = SelectObject(hdc, kp);
+                        RoundRect(hdc, knobR.left, knobR.top, knobR.right,
+                                  knobR.bottom, knobD, knobD);
+                        SelectObject(hdc, okb);
+                        SelectObject(hdc, okp);
+                        DeleteObject(kb);
+                        DeleteObject(kp);
+                    }
+                    d->showExtLastPainted = on;
+                }
+                SelectObject(hdc, chipFont);
                 y += countsH;
                 y += kSelHdrGap;   // even breathing: type breakdown -> divider
 
@@ -6559,8 +7987,18 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // Level 3 -- the visible rows.
                 const mode::Mode lm = d->expanded ? mode::Mode::Expanded
                                                   : mode::Mode::Compact;
-                const int visRows = mode::VisibleRows(lm);
                 const int itemCount = static_cast<int>(d->items.size());
+                const int rowsTop = y;   // top of the rows region (for the track)
+                // fix thse isseue.md Phase 1A: the per-mode row count is only a
+                // DECLARED maximum. Reconcile it with the TRUE number of rows
+                // the remaining viewport can paint ((rc.bottom - rowsTop) at
+                // rowH per row), so a declared-but-unfit row is never silently
+                // clipped and the scrollbar is enabled whenever fewer rows
+                // physically fit than the cap. Cache it so the modal-loop
+                // wheel/key handlers page by the SAME capacity.
+                const int visRows = listscroll::EffectiveVisibleRows(
+                    mode::VisibleRows(lm), rc.bottom - rowsTop, rowH);
+                d->listVisibleRows = visRows;
                 const listscroll::Range vr = listscroll::VisibleRange(
                     d->listTopRow, itemCount, visRows);
                 // fix thse isseu e.md #4: reserve a right-edge gutter for a
@@ -6571,21 +8009,45 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const int barW = S(listscroll::kScrollbarW);
                 const int rowRight =
                     listscroll::ContentWidth(right, needsBar ? barW : 0, needsBar);
-                const int rowsTop = y;   // top of the rows region (for the track)
                 // fix thse isseue.md #1: the name column tracks the LIVE
                 // content width (rowRight already excludes the scrollbar
                 // gutter), so the genuinely-wider expanded window fills the
                 // extra horizontal space instead of staying pinned to the fixed
                 // compact kContentW. Columns are DPI-scaled to match the row.
+                // fix thse isseue.md Phase 1B: when Show-extensions is ON the
+                // extension is drawn INLINE in the filename and NO separate EXT
+                // pill is painted, so the name column RECLAIMS the fixed EXT
+                // column width (ext width 0). OFF keeps the reserved EXT column.
+                const int extW  = d->showExt ? 0 : S(listcol::kExtW);
+                const int sizeW = S(listcol::kSizeW);
                 const int nameW = listcol::NameWidthFrom(
                     rowRight - left,
-                    S(listcol::kExtW), S(listcol::kSizeW), S(listcol::kColGap),
+                    extW, sizeW, S(listcol::kColGap),
                     S(listcol::kMinNameW));
-                const int extW  = S(listcol::kExtW);
-                const int sizeW = S(listcol::kSizeW);
                 for (int r = 0; r < vr.count && y + rowH <= rc.bottom; ++r) {
                     const sel::Item& it =
                         d->items[static_cast<size_t>(vr.first + r)];
+                    // fix thse isseue.md #2: apply the ACTIVE chip filter's
+                    // highlight to THIS row via the tested chipfilter:: model --
+                    // matching rows keep full strength, non-matching rows are
+                    // subtly subdued (dimmed text) but stay in their original
+                    // position. NEVER changes the real selection or Copy/Move plan.
+                    const std::wstring rowExtKey = it.isFolder
+                        ? std::wstring()
+                        : chipmodel::NormExtKey(sel::ExtLabel(it.name, false));
+                    const chipfilter::Row rowFilt =
+                        chipfilter::RowFor(chipState, rowExtKey, it.isFolder);
+                    const bool rowSubdued = (rowFilt == chipfilter::Row::Subdued);
+                    const COLORREF rowNameColor = rowSubdued
+                        ? RGB(hovertint::BlendChannel(GetRValue(pal.panelText), GetRValue(pal.cardBg), 55),
+                              hovertint::BlendChannel(GetGValue(pal.panelText), GetGValue(pal.cardBg), 55),
+                              hovertint::BlendChannel(GetBValue(pal.panelText), GetBValue(pal.cardBg), 55))
+                        : pal.panelText;
+                    const COLORREF rowMetaColor = rowSubdued
+                        ? RGB(hovertint::BlendChannel(GetRValue(secondary), GetRValue(pal.cardBg), 55),
+                              hovertint::BlendChannel(GetGValue(secondary), GetGValue(pal.cardBg), 55),
+                              hovertint::BlendChannel(GetBValue(secondary), GetBValue(pal.cardBg), 55))
+                        : secondary;
                     // Leading row icon column. fix thse isseue.md #9: draw the
                     // REAL Windows Shell icon for the item's type (folder icon,
                     // or the extension-associated file icon) so rows look just
@@ -6617,83 +8079,41 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     }
                     // name (left of the icon column, ellipsized)
                     const int nameLeft = left + iconW + iconGap;
-                    SetTextColor(hdc, pal.panelText);
+                    SetTextColor(hdc, rowNameColor);
                     RECT nr = {nameLeft, y, nameLeft + nameW - iconW - iconGap,
                                y + rowH};
-                    std::wstring nm = sel::RowName(it.name, it.isFolder);
+                    // fix thse isseue.md Phase 1B: the name honors the
+                    // Show-extensions toggle -- stem when OFF, the COMPLETE
+                    // filename inline when ON (folders always whole-name) -- via
+                    // the tested sel::RowDisplayName model. DT_END_ELLIPSIS over
+                    // the (ext-reclaimed) name width keeps the filename and size
+                    // badge from ever overlapping.
+                    const bool extInline =
+                        showext::RowShowsExtInline(d->showExt, it.isFolder);
+                    std::wstring nm =
+                        sel::RowDisplayName(it.name, it.isFolder, extInline);
                     DrawTextW(hdc, nm.c_str(), -1, &nr,
                               DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-                    // SIZE (far right, left of the scrollbar gutter)
-                    SetTextColor(hdc, secondary);
-                    RECT szr = {rowRight - sizeW, y, rowRight, y + rowH};
+                    // SIZE (far right, left of the scrollbar gutter). fix thse
+                    // isseue.md #1: the real filesystem size is the DEFAULT
+                    // right-hand metadata for files with a known size, and is
+                    // NEVER drawn for folders -- the decision is the tested
+                    // showext::RowShowsSize model (sizeKnown == non-empty
+                    // HumanSize text).
                     std::wstring sz = sel::HumanSize(it.sizeBytes);
-                    DrawTextW(hdc, sz.c_str(), -1, &szr,
-                              DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
-                    // EXT badge (left of SIZE): a rounded PILL behind the
-                    // uppercased extension (fix thse isseue.md #5), via the
-                    // tested listbadge:: geometry. Folders / extensionless rows
-                    // (sel::ExtLabel == "") show no pill.
-                    std::wstring ex = sel::ExtLabel(it.name, it.isFolder);
-                    if (listbadge::ShowBadge(ex)) {
-                        SIZE tsz = {0, 0};
-                        GetTextExtentPoint32W(hdc, ex.c_str(),
-                                              static_cast<int>(ex.size()), &tsz);
-                        const int bpadX = S(listbadge::kPadX);
-                        const int bpadY = S(listbadge::kPadY);
-                        const int brad  = S(listbadge::kRadius) * 2;
-                        const int cellRight = rowRight - sizeW - S(2);
-                        int badgeW = listbadge::BadgeWidth(tsz.cx, bpadX,
-                                                           S(listbadge::kMinW));
-                        if (badgeW > extW - S(2)) badgeW = extW - S(2);
-                        const listbadge::Box bb =
-                            listbadge::BadgeRect(cellRight, y, rowH, badgeW, bpadY);
-                        // fix thse isseue.md #12: a SOFT per-extension chip from
-                        // the tested badgecolor:: table -- a soft fill + a darker
-                        // (light theme) / lighter (dark theme) ink reused for the
-                        // text AND the hairline border. Unknown types inherit the
-                        // themed neutral chip. Never a saturated full block.
-                        const badgecolor::Chip chip =
-                            badgecolor::ChipForLabel(ex, dark);
-                        COLORREF fillCol   = pal.badgeFill;
-                        COLORREF borderCol = pal.badgeBorder;
-                        COLORREF textCol   = secondary;
-                        if (!chip.inherit) {
-                            fillCol = RGB((chip.fill >> 16) & 0xFF,
-                                          (chip.fill >> 8) & 0xFF, chip.fill & 0xFF);
-                            const COLORREF ink = RGB((chip.ink >> 16) & 0xFF,
-                                                     (chip.ink >> 8) & 0xFF,
-                                                     chip.ink & 0xFF);
-                            // #9/#14: the HAIRLINE uses a SOFTER, less-dominant
-                            // tone (ink blended toward the fill), never the full
-                            // text ink -- so there is no hard black outline. The
-                            // text keeps the full category ink for legibility.
-                            const unsigned sb = badgecolor::SoftBorder(chip);
-                            borderCol = RGB((sb >> 16) & 0xFF,
-                                            (sb >> 8) & 0xFF, sb & 0xFF);
-                            textCol   = ink;
-                        }
-                        // #2/#12: anti-aliased pill via Direct2D; GDI fallback.
-                        const RECT bbr = {bb.left, bb.top, bb.right, bb.bottom};
-                        if (!DrawRoundSurfaceAA(hdc, bbr,
-                                                aarender::Surface::Badge, brad,
-                                                fillCol, true, borderCol, 1)) {
-                            HBRUSH pill = CreateSolidBrush(fillCol);
-                            HPEN   pbrd = CreatePen(PS_SOLID, 1, borderCol);
-                            HGDIOBJ opb = SelectObject(hdc, pill);
-                            HGDIOBJ opp = SelectObject(hdc, pbrd);
-                            RoundRect(hdc, bb.left, bb.top, bb.right, bb.bottom,
-                                      brad, brad);
-                            SelectObject(hdc, opb);
-                            SelectObject(hdc, opp);
-                            DeleteObject(pill);
-                            DeleteObject(pbrd);
-                        }
-                        // Centred uppercased extension in the chip's ink tone.
-                        SetTextColor(hdc, textCol);
-                        RECT exr = {bb.left, bb.top, bb.right, bb.bottom};
-                        DrawTextW(hdc, ex.c_str(), -1, &exr,
-                                  DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                    if (showext::RowShowsSize(it.isFolder, !sz.empty())) {
+                        SetTextColor(hdc, rowMetaColor);
+                        RECT szr = {rowRight - sizeW, y, rowRight, y + rowH};
+                        DrawTextW(hdc, sz.c_str(), -1, &szr,
+                                  DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
                     }
+                    // fix thse isseue.md Phase 1B: there is NO separate
+                    // extension pill. When Show-extensions is ON the complete
+                    // filename is drawn INLINE in the name cell above
+                    // (sel::RowDisplayName) and the fixed EXT column width is
+                    // reclaimed by the name column; when OFF the row shows the
+                    // stem only. Either way the size badge keeps its own
+                    // right-hand metadata column, so sizes stay visible.
                     y += rowH;
                 }
 
@@ -6744,6 +8164,70 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 SelectObject(hdc, bbOld);
                 DeleteObject(bbBmp);
                 DeleteDC(hdc);
+                return TRUE;
+            }
+            // ADD-ON (Phase D): the timed Auto Group button (id 120). It reuses
+            // the EXACT secondary-button surface (same palette tokens, same
+            // rounded AA fill + 1px border) as Cancel so it never introduces a
+            // new visual style. fix thse isseue.md #5: while the five-second
+            // delay is Waiting the button keeps that normal muted surface (NO
+            // black lock rectangle) and shows a stable, SEMIBOLD, centered M:SS
+            // countdown (agcd::CountdownText -> 0:05..0:01, no milliseconds).
+            // Once Enabled it shows the plain "Auto Group" caption. The state is
+            // read fresh from the monotonic clock so it matches WM_TIMER exactly.
+            if (dis->CtlType == ODT_BUTTON && dis->CtlID == 120 && d) {
+                HDC hdc = dis->hDC;
+                const bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+                const UINT dpi = d->dpi;
+                const int rad = ScaleDpi(14, dpi);
+                ThemePalette pal = ResolveThemePalette(IsDarkMode());
+                const bool en = AtomicGet(&g_autoGroupEnabled) != 0;
+                const agcd::State st =
+                    agcd::Resolve(en, d->autoGroupStartTick, GetTickCount64());
+                RECT rc = dis->rcItem;
+                // Secondary (Cancel-style) surface tokens.
+                COLORREF fill = pressed ? pal.cancelFillPressed : pal.cancelFill;
+                COLORREF border = pal.cancelBorder;
+                COLORREF txt = pal.cancelText;
+                // Parent panel surface behind the square HWND corners.
+                HBRUSH pbg = CreateSolidBrush(pal.panelBg);
+                FillRect(hdc, &rc, pbg);
+                DeleteObject(pbg);
+                if (!DrawRoundSurfaceAA(hdc, rc, aarender::Surface::Button,
+                                        rad, fill, true, border, 1)) {
+                    HBRUSH fb = CreateSolidBrush(fill);
+                    HPEN pen = CreatePen(PS_SOLID, 1, border);
+                    HGDIOBJ ob = SelectObject(hdc, fb);
+                    HGDIOBJ op = SelectObject(hdc, pen);
+                    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, rad, rad);
+                    SelectObject(hdc, op);
+                    SelectObject(hdc, ob);
+                    DeleteObject(fb);
+                    DeleteObject(pen);
+                }
+                SetBkMode(hdc, TRANSPARENT);
+                if (agcd::ShowOverlay(st)) {
+                    // fix thse isseue.md #5: during the safety delay the button
+                    // keeps its NORMAL muted secondary surface (already filled
+                    // above) -- NO black lock rectangle -- and shows a STABLE,
+                    // SEMIBOLD, centered M:SS countdown (0:05..0:01) with NO
+                    // milliseconds. The text is the whole-second value, so it
+                    // changes at most once per second (no flashing suffix).
+                    const int secs = agcd::RemainingSeconds(
+                        en, d->autoGroupStartTick, GetTickCount64());
+                    std::wstring cd = agcd::CountdownText(secs);
+                    HGDIOBJ ofc = SelectObject(hdc, UiFontSemibold(dpi));
+                    SetTextColor(hdc, txt);
+                    DrawTextW(hdc, cd.c_str(), -1, &rc,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+                    SelectObject(hdc, ofc);
+                } else {
+                    HGDIOBJ of = SelectObject(hdc, UiFont(dpi));
+                    SetTextColor(hdc, txt);
+                    DrawTextW(hdc, L"Auto Group", -1, &rc,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(hdc, of);
+                }
                 return TRUE;
             }
             // fix thse isseue.md #1: the progress track (id 106) was removed
@@ -7004,7 +8488,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     // fix thse isseue.md #1: Copy/Move use EMOJI (not the custom
                     // vector glyphs), drawn in the same centred icon box.
                     DrawTextW(hdc,
-                              dis->CtlID == 107 ? L"📋" : L"📂",
+                              dis->CtlID == 107 ? L"\U0001F4CB" : L"\U0001F4C2",
                               -1, &ir,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
                     RECT tr = {gl + ico + gap, rc.top, rc.right, rc.bottom};
@@ -7123,6 +8607,88 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 if (d->segCopyBtn) InvalidateRect(d->segCopyBtn, nullptr, FALSE);
                 if (d->segMoveBtn) InvalidateRect(d->segMoveBtn, nullptr, FALSE);
                 SetFocus(id == 107 ? d->segCopyBtn : d->segMoveBtn);
+                return 0;
+            }
+            // ADD-ON (Phase D): the timed Auto Group button (id 120). It only
+            // ACTS when the five-second countdown has elapsed (agcd::Clickable).
+            // On a valid click it previews the plan (destination + counts) from
+            // the pure autogroup:: model, shows a concise confirmation, and --
+            // on OK -- closes the popup marking the result as an Auto Group
+            // request. It performs NO filesystem work here; the worker does that
+            // in a later phase (and in THIS phase only logs the request). Normal
+            // Group/Create/Cancel are unaffected and stay usable throughout.
+            if (id == 120 && d && d->isGroup) {
+                const bool en = AtomicGet(&g_autoGroupEnabled) != 0;
+                const agcd::State st =
+                    agcd::Resolve(en, d->autoGroupStartTick, GetTickCount64());
+                if (!agcd::Clickable(st)) {
+                    return 0;  // still counting down -> ignore the click entirely
+                }
+                // Resolve the Auto Group destination root for the PREVIEW. This
+                // mirrors the worker's dedicated resolver precedence (fixed
+                // destination, else the captured common parent) and NEVER reuses
+                // the typed name or g_lastGroupTarget.
+                std::wstring fixedDest;
+                {
+                    EnterCriticalSection(&g_templatesCs);
+                    fixedDest = g_groupDestination;
+                    LeaveCriticalSection(&g_templatesCs);
+                }
+                std::wstring root = !fixedDest.empty() ? fixedDest : d->effectiveDest;
+                if (root.empty()) {
+                    MessageBoxW(hwnd,
+                        L"Auto Group needs a common parent folder for the "
+                        L"selection, or a configured Fixed destination folder. "
+                        L"The current selection does not share one, so nothing "
+                        L"was changed.",
+                        L"Auto Group", MB_OK | MB_ICONINFORMATION);
+                    return 0;
+                }
+                // Count eligible files and folders straight from the immutable
+                // selection model (no FS access). The full path-based plan is
+                // built in the worker (later phase); this is only the preview.
+                const bool agImages = AtomicGet(&g_autoGroupLayout) != 0;
+                const bool agGroupFolders = AtomicGet(&g_autoGroupSelectedFolders) != 0;
+                std::wstring agImagesName, agAllName;
+                {
+                    EnterCriticalSection(&g_templatesCs);
+                    agImagesName = g_autoGroupImageParentName;
+                    agAllName = g_autoGroupFoldersName;
+                    LeaveCriticalSection(&g_templatesCs);
+                }
+                const bool agMove = d->isMove;
+                size_t fileCount = 0, folderCount = 0;
+                for (const auto& it : d->items) {
+                    if (it.isFolder) ++folderCount; else ++fileCount;
+                }
+                const size_t foldersToMove = agGroupFolders ? folderCount : 0;
+                std::wstring msg =
+                    L"Auto Group will organize the selected files into "
+                    L"extension folders.\n\n";
+                msg += L"Destination:  " + root + L"\n";
+                msg += L"Files to organize:  " + std::to_wstring(fileCount) + L"\n";
+                msg += L"Operation:  " + std::wstring(agMove ? L"Move" : L"Copy") + L"\n";
+                if (agGroupFolders) {
+                    msg += L"Selected folders moved into \"" + agAllName +
+                           L"\":  " + std::to_wstring(foldersToMove) + L"\n";
+                } else {
+                    msg += L"Selected folders:  left untouched\n";
+                }
+                if (agImages) {
+                    msg += L"Image types grouped under:  \"" + agImagesName + L"\"\n";
+                }
+                msg += L"\nProceed?";
+                const int res = MessageBoxW(hwnd, msg.c_str(), L"Auto Group",
+                                            MB_OKCANCEL | MB_ICONQUESTION);
+                if (res != IDOK) {
+                    return 0;  // user cancelled the confirmation; popup stays open
+                }
+                d->accepted = true;
+                d->autoGroupRequested = true;
+                Wh_Log(L"AutoGroup: user confirmed; request produced (files=%zu, "
+                       L"foldersToMove=%zu, move=%d) -- worker performs the operation",
+                       fileCount, foldersToMove, agMove ? 1 : 0);
+                DestroyWindow(hwnd);
                 return 0;
             }
             if (id == IDOK && d) {
@@ -7290,6 +8856,11 @@ struct GroupPromptSeed {
     // is configured. Does NOT change ResolveGroupDestination precedence.
     std::wstring effectiveDest;
     bool isMove = false;  // in: default from setting; out: user's final choice
+    // ADD-ON: OUT flag. The popup sets this true ONLY when the user confirmed
+    // the timed Auto Group button (never on normal Group/Create). The worker
+    // branches on it BEFORE any typed-name / g_lastGroupTarget resolution so an
+    // Auto Group request can never reuse the last target.
+    bool autoGroup = false;
     // fix thse isseue.md #1: the live worker->popup status round-trip was
     // removed. The popup always closes on Create/Cancel, so there is no live
     // HWND / session hand-off any more.
@@ -7409,7 +8980,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
     if (setDpiCtx) prevDpiCtx = setDpiCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HWND hwnd = CreateWindowExW(
         exStyle, kClass,
-        (data.isGroup ? L"Group into folder" : L"New folder"),
+        (data.isGroup ? L"\U0001F4C2 Group into folder" : L"New folder"),
         winStyle,
         x, y, w, h, nullptr, nullptr, HINST_THISCOMPONENT, session.get());
     if (setDpiCtx && prevDpiCtx) setDpiCtx(prevDpiCtx);
@@ -7577,9 +9148,138 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
         // d->listTopRow is the single source of truth and the selection is
         // never mutated.
         if (data.isGroup && data.groupInfo) {
-            const int visRows = mode::VisibleRows(
-                data.expanded ? mode::Mode::Expanded : mode::Mode::Compact);
+            // fix thse isseue.md Phase 1A: page by the TRUE visible-row capacity
+            // the owner-draw paint cached (the declared per-mode cap reconciled
+            // with what the viewport physically fits), so wheel/key scrolling
+            // reaches a row that would otherwise be clipped. Fall back to the
+            // declared cap before the first paint has populated the cache.
+            const int visRows = data.listVisibleRows > 0
+                ? data.listVisibleRows
+                : mode::VisibleRows(
+                      data.expanded ? mode::Mode::Expanded : mode::Mode::Compact);
             const int itemCount = static_cast<int>(data.items.size());
+            // fix thse isseue.md #2/#3: summary-chip interactions live in the
+            // same modal pump as the list. The owner-draw painter records the
+            // chip strip + per-chip hit rects in list (id 110) client coords, so
+            // here we hit-test the cursor against them. NONE of this touches the
+            // real Explorer selection or the Copy/Move/Group plan.
+            POINT cpt = {0, 0};
+            GetCursorPos(&cpt);
+            POINT clientPt = cpt;
+            ScreenToClient(data.groupInfo, &clientPt);
+            const bool overChipStrip =
+                PtInRect(&data.chipStripRect, clientPt) != FALSE;
+            const int chipPxPerNotch = ScaleDpi(40, data.dpi);
+            // --- mouse click: Show-extensions toggle, then chip filter ---
+            if (msg.message == WM_LBUTTONDOWN) {
+                if (PtInRect(&data.chipToggleRect, clientPt)) {
+                    // fix thse isseue.md #3: flip the per-row extension badges.
+                    // Does NOT change the filter selection, source selection or
+                    // Group/Copy/Move behavior; a repaint re-renders the rows via
+                    // the tested showext:: model.
+                    data.showExt = !data.showExt;
+                    RefreshGroupPanel(&data);
+                    continue;
+                }
+                if (overChipStrip) {
+                    int hitIdx = -1;
+                    for (size_t ci = 0; ci < data.chipHitRects.size(); ++ci) {
+                        if (PtInRect(&data.chipHitRects[ci], clientPt)) {
+                            hitIdx = static_cast<int>(ci);
+                            break;
+                        }
+                    }
+                    if (hitIdx >= 0) {
+                        chipfilter::State cs = ChipStateFrom(&data);
+                        const int k = data.chipHitKind[hitIdx];
+                        if (k == 2) chipfilter::ActivateFolders(cs);
+                        else if (k == 3) chipfilter::ActivateNoExt(cs);
+                        else if (k == 4) chipfilter::ActivateExt(cs, data.chipHitKey[hitIdx]);
+                        else chipfilter::ActivateItems(cs);
+                        ChipStateInto(&data, cs);
+                        data.chipFocusIndex = hitIdx;
+                        RefreshGroupPanel(&data);
+                    }
+                    // A click anywhere on the strip is consumed so it can never
+                    // start list scrolling or activate another control.
+                    continue;
+                }
+                // Clicking OUTSIDE the strip clears any active highlight, but is
+                // NOT consumed -- the normal button/edit action still runs.
+                if (ChipStateFrom(&data).active()) {
+                    chipfilter::State cs = ChipStateFrom(&data);
+                    chipfilter::ClickOutside(cs);
+                    ChipStateInto(&data, cs);
+                    data.chipFocusIndex = -1;
+                    RefreshGroupPanel(&data);
+                }
+            }
+            // --- horizontal wheel pan over the chip strip, independent of the
+            // vertical list scroll. WM_MOUSEHWHEEL and Shift+WM_MOUSEWHEEL pan
+            // horizontally via the tested chipscroll:: model. ---
+            if ((msg.message == WM_MOUSEWHEEL && (GetKeyState(VK_SHIFT) & 0x8000)) ||
+                msg.message == WM_MOUSEHWHEEL) {
+                if (overChipStrip &&
+                    chipscroll::NeedsScroll(data.chipContentW, data.chipViewportW)) {
+                    const int raw =
+                        static_cast<int>(static_cast<short>(HIWORD(msg.wParam)));
+                    const int delta = (msg.message == WM_MOUSEHWHEEL)
+                        ? chipscroll::WheelDeltaFromHorizontal(raw) : raw;
+                    const int maxOff =
+                        chipscroll::MaxOffset(data.chipContentW, data.chipViewportW);
+                    const int off = chipscroll::OnWheel(data.chipScrollOffset,
+                                                        delta, maxOff, chipPxPerNotch);
+                    if (off != data.chipScrollOffset) {
+                        data.chipScrollOffset = off;
+                        RefreshGroupPanel(&data);
+                    }
+                    continue;
+                }
+            }
+            // --- keyboard: Left/Right navigate chips (bringing an offscreen
+            // chip into view), Space activates the focused chip. Only when no
+            // interactive control owns focus, so the filename field keeps its
+            // own Left/Right caret movement and dialog Enter/Esc are untouched. -
+            {
+                const HWND cfw = GetFocus();
+                const bool chipKeys = !(cfw == data.edit ||
+                    cfw == data.createBtn || cfw == data.cancelBtn ||
+                    cfw == data.segCopyBtn || cfw == data.segMoveBtn);
+                const int chipCount = static_cast<int>(data.chipHitRects.size());
+                if (msg.message == WM_KEYDOWN && chipKeys && chipCount > 0 &&
+                    (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)) {
+                    const chipscroll::Key k = (msg.wParam == VK_LEFT)
+                        ? chipscroll::Key::Left : chipscroll::Key::Right;
+                    const int fi = (data.chipFocusIndex < 0)
+                        ? 0 : chipscroll::OnKey(k, data.chipFocusIndex, chipCount);
+                    data.chipFocusIndex = fi;
+                    if (fi >= 0 && fi < chipCount) {
+                        const RECT& hr = data.chipHitRects[fi];
+                        const int chipLeftAbs =
+                            (hr.left - data.chipStripRect.left) + data.chipScrollOffset;
+                        const int off = chipscroll::BringIntoView(
+                            chipLeftAbs, chipLeftAbs + (hr.right - hr.left),
+                            data.chipScrollOffset, data.chipViewportW);
+                        data.chipScrollOffset = chipscroll::Clamp(off,
+                            chipscroll::MaxOffset(data.chipContentW, data.chipViewportW));
+                    }
+                    RefreshGroupPanel(&data);
+                    continue;
+                }
+                if (msg.message == WM_KEYDOWN && chipKeys && chipCount > 0 &&
+                    msg.wParam == VK_SPACE && data.chipFocusIndex >= 0 &&
+                    data.chipFocusIndex < chipCount) {
+                    chipfilter::State cs = ChipStateFrom(&data);
+                    const int k = data.chipHitKind[data.chipFocusIndex];
+                    if (k == 2) chipfilter::ActivateFolders(cs);
+                    else if (k == 3) chipfilter::ActivateNoExt(cs);
+                    else if (k == 4) chipfilter::ActivateExt(cs, data.chipHitKey[data.chipFocusIndex]);
+                    else chipfilter::ActivateItems(cs);
+                    ChipStateInto(&data, cs);
+                    RefreshGroupPanel(&data);
+                    continue;
+                }
+            }
             if (msg.message == WM_MOUSEWHEEL) {
                 POINT pt = {
                     static_cast<LONG>(static_cast<short>(LOWORD(msg.lParam))),
@@ -7700,6 +9400,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
     // Snapshot the values we need from `data` before `session` frees it below.
     const bool  accepted  = data.accepted;
     const bool  finalMove = data.isMove;
+    const bool  autoGroupReq = data.autoGroupRequested;  // ADD-ON: Auto Group confirmed
     std::wstring finalBase = data.base;
 
     // Bug 4: the popup was never owned or disabled, so there is nothing to
@@ -7716,6 +9417,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
     // `session` unique_ptr frees the heap state on return -- no hand-off.
     if (group && group->isGroup) {
         group->isMove = finalMove;
+        group->autoGroup = autoGroupReq;  // ADD-ON: worker branches on this
     }
 
     if (accepted) {
@@ -8866,6 +10568,165 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
     return ok;
 }
 
+// ADD-ON (Phase E): execute an Auto Group request. Pure planning lives in the
+// mirrored autogroup:: model; the ACTUAL filesystem work reuses the existing,
+// safe PerformGroupOperation() once PER destination bucket, so directory
+// creation, self/descendant guards, IFileOperation, Copy/Move and the file
+// collision policy all behave exactly like a normal Ctrl+G group. The worker
+// MUST have already branched on the explicit Auto Group request before any
+// typed-name / g_lastGroupTarget resolution (never reuse the last target).
+//
+// `fixedDest` is the configured Fixed destination (may be empty). `parent` is
+// the captured common parent (may be empty when the selection spans several
+// folders). isMove is the user's final Copy/Move choice. Returns true only when
+// every bucket that had items reported success; reports partial results in the
+// log rather than claiming a clean success.
+static bool PerformAutoGroupOperation(const std::vector<CapturedItem>& items,
+                                      const std::wstring& fixedDest,
+                                      const std::wstring& parent,
+                                      bool isMove,
+                                      HWND owner) {
+    // Build the immutable source list from the ORIGINAL captured selection only
+    // (never an enumeration of the destination), so Auto Group's own generated
+    // folders can never be swept back in.
+    std::vector<autogroup::SrcItem> src;
+    src.reserve(items.size());
+    for (const auto& it : items) {
+        if (it.isVirtual || it.path.empty()) continue;  // unsupported/virtual
+        src.push_back(autogroup::SrcItem{it.path, it.isFolder});
+    }
+
+    autogroup::Settings st;
+    st.layout = (AtomicGet(&g_autoGroupLayout) != 0)
+                    ? autogroup::Layout::ImagesParent
+                    : autogroup::Layout::Flat;
+    st.groupSelectedFolders = AtomicGet(&g_autoGroupSelectedFolders) != 0;
+    st.noExtensionEnabled = AtomicGet(&g_autoGroupNoExtension) != 0;
+    st.isMove = isMove;
+    {
+        EnterCriticalSection(&g_templatesCs);
+        st.imagesParentName = g_autoGroupImageParentName;
+        st.allFolderName = g_autoGroupFoldersName;
+        st.noExtensionName = g_autoGroupNoExtensionName;
+        LeaveCriticalSection(&g_templatesCs);
+    }
+
+    autogroup::Plan plan = autogroup::BuildPlan(src, fixedDest, st);
+    if (!plan.ok) {
+        Wh_Log(L"AutoGroup: destination could not be resolved (status=%d); the "
+               L"selection needs a common parent or a configured destination -- "
+               L"no filesystem change",
+               static_cast<int>(plan.dest.status));
+        return false;
+    }
+    if (plan.files.empty() && plan.folders.empty()) {
+        Wh_Log(L"AutoGroup: nothing eligible to organize (skipped=%zu); no "
+               L"filesystem change", plan.skipped.size());
+        return false;
+    }
+
+    // Phase F: create every planned destination directory UP FRONT, in the
+    // plan's deterministic order, so a parent (e.g. the Images parent) always
+    // exists before its child bucket -- CreateFolderWithShellElevation makes a
+    // single leaf only and fails when the parent is missing. An existing
+    // directory is reused; an ordinary FILE occupying a required path blocks
+    // that bucket safely (never overwritten) and anything targeting it is
+    // skipped rather than mis-routed.
+    bool allOk = true;
+    std::vector<std::wstring> blockedDirs;
+    auto dirBlocked = [&](const std::wstring& dir) {
+        for (const auto& b : blockedDirs) {
+            if (autogroup::PathEqualCI(b, dir)) return true;
+        }
+        return false;
+    };
+    int dirsCreated = 0;
+    for (const auto& dir : plan.dirsToCreate) {
+        if (PathFileExistsW(dir.c_str())) {
+            if (!PathIsDirectoryW(dir.c_str())) {
+                blockedDirs.push_back(dir);
+                Wh_Log(L"AutoGroup: a file occupies '%ls'; that bucket is "
+                       L"skipped (never overwritten)", dir.c_str());
+            }
+            continue;  // reuse an existing directory
+        }
+        if (!CreateFolderWithShellElevation(dir, owner)) {
+            blockedDirs.push_back(dir);
+            allOk = false;
+            Wh_Log(L"AutoGroup: could not create '%ls'; that bucket is skipped",
+                   dir.c_str());
+            continue;
+        }
+        ++dirsCreated;
+    }
+
+    // Route each eligible FILE into its destination bucket. Each
+    // PerformGroupOperation call handles exactly one bucket (one IFileOperation
+    // batch) and reuses the directory created above; a bucket blocked by a file
+    // is skipped. The Copy/Move choice and the file-collision policy are the
+    // same as a normal Ctrl+G group.
+    int bucketsRun = 0, filesRouted = 0;
+    for (const auto& dir : plan.dirsToCreate) {
+        if (dirBlocked(dir)) continue;
+        std::vector<CapturedItem> bucketItems;
+        for (const auto& f : plan.files) {
+            if (autogroup::PathEqualCI(f.destDir, dir)) {
+                CapturedItem ci;
+                ci.path = f.src;
+                ci.isFolder = false;
+                bucketItems.push_back(ci);
+            }
+        }
+        if (bucketItems.empty()) continue;  // a parent-only dir (e.g. Images)
+        ++bucketsRun;
+        filesRouted += static_cast<int>(bucketItems.size());
+        if (!PerformGroupOperation(bucketItems, dir, isMove, owner)) {
+            allOk = false;
+            Wh_Log(L"AutoGroup: bucket '%ls' did not complete", dir.c_str());
+        }
+    }
+
+    // Phase F: selected-folder grouping. Only when the setting is on did
+    // BuildPlan queue the ORIGINAL captured folders for the All Folder
+    // directory (the generated output buckets are NEVER included). Selected
+    // folders are MOVED into All Folder regardless of the file Copy/Move choice
+    // (spec section 7), so the originals are relocated, not duplicated.
+    int foldersMoved = 0;
+    if (!plan.folders.empty()) {
+        const std::wstring allDir = plan.folders.front().destDir;
+        if (dirBlocked(allDir)) {
+            allOk = false;
+            Wh_Log(L"AutoGroup: '%ls' is blocked; selected folders left "
+                   L"untouched", allDir.c_str());
+        } else {
+            std::vector<CapturedItem> folderItems;
+            for (const auto& fo : plan.folders) {
+                CapturedItem ci;
+                ci.path = fo.src;
+                ci.isFolder = true;
+                folderItems.push_back(ci);
+            }
+            const bool kFolderMove = true;  // folders always MOVED, never copied
+            if (PerformGroupOperation(folderItems, allDir, kFolderMove, owner)) {
+                foldersMoved = static_cast<int>(folderItems.size());
+            } else {
+                allOk = false;
+                Wh_Log(L"AutoGroup: All Folder move did not complete for '%ls'",
+                       allDir.c_str());
+            }
+        }
+    }
+
+    Wh_Log(L"AutoGroup: %ls -- %d dir(s) created, %d bucket(s), %d file(s) "
+           L"routed, %d folder(s) -> All Folder, %zu skipped, root='%ls', "
+           L"fileOp=%ls",
+           allOk ? L"completed" : L"PARTIAL (see failures above)",
+           dirsCreated, bucketsRun, filesRouted, foldersMoved,
+           plan.skipped.size(), plan.dest.root.c_str(),
+           isMove ? L"move" : L"copy");
+    return allOk;
+}
+
 // Ctrl+G fired: offload a Group action to the worker. Non-blocking -- the hook
 // thread never does COM / filesystem work inline (same rule as
 // PostFolderActionCount). Selection capture (Task 5c) and Move/Copy via
@@ -9296,14 +11157,18 @@ static DWORD WINAPI WorkerThread(void* pParameter) {
                 seed.isGroup = true;
                 {
                     // Full selection for the scrollable Selected Items panel
-                    // (name + folder flag). Size is left unknown (-1) so no size
-                    // column is drawn unless a later pass captures real sizes.
+                    // (name + folder flag + real size on disk). Sizes are read
+                    // ONCE here (worker thread, metadata-only) and cached on the
+                    // model so the owner-draw paint path never touches the disk.
                     for (size_t i = 0; i < sel.size(); ++i) {
                         sel::Item it;
                         it.name = sel[i].isVirtual
                                       ? sel[i].display
                                       : GetFileNamePart(sel[i].path);
                         it.isFolder = sel[i].isFolder;
+                        if (!it.isFolder && !sel[i].isVirtual) {
+                            it.sizeBytes = ResolveFileSizeOnDisk(sel[i].path);
+                        }
                         seed.items.push_back(it);
                     }
                 }
@@ -9333,6 +11198,27 @@ static DWORD WINAPI WorkerThread(void* pParameter) {
                 }
                 const bool isMove = seed.isMove;  // user's final Move/Copy choice
 
+                // ADD-ON (Phase E): branch on the EXPLICIT Auto Group request
+                // BEFORE any typed-name resolution and before anything that can
+                // reuse g_lastGroupTarget, so Auto Group can never fall through
+                // the normal blank-name path. The dedicated executor resolves
+                // its own destination (fixed dest, else the captured common
+                // parent) and routes each eligible file into its extension
+                // bucket. g_lastGroupTarget is intentionally NOT touched here.
+                if (seed.autoGroup) {
+                    const bool agOk = PerformAutoGroupOperation(
+                        sel, fixedDest, parent, isMove, groupOrigin);
+                    if (agOk && AtomicGet(&g_groupOpenAfter) != 0) {
+                        // Open the resolved destination root (fixed dest, else
+                        // the captured parent) after a successful Auto Group.
+                        const std::wstring openRoot =
+                            !fixedDest.empty() ? fixedDest : parent;
+                        if (!openRoot.empty()) {
+                            NavigateActiveTabToFolder(groupOrigin, nullptr, openRoot);
+                        }
+                    }
+                    continue;
+                }
 
                 GroupDestChoiceM choice =
                     ResolveGroupDestination(fixedDest, parent, typedName,
@@ -9840,7 +11726,7 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
 BOOL WhTool_ModInit() {
     // Startup diagnostic. The version here MUST match the @version metadata
     // above.
-    Wh_Log(L"INIT: v0.12.60 ctrlg-group loaded");
+    Wh_Log(L"INIT: v0.12.61 ctrlg-group loaded");
     // Guard g_templates/g_templateCollision. Created BEFORE the first
     // LoadSettings() call (which publishes into them) and before the hook
     // starts, so no thread ever touches the CS uninitialised.
