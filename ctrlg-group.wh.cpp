@@ -330,6 +330,8 @@ hook / worker-thread design. Credit and thanks to their authors:
     $description: >-
       Off (default): stay where you are after grouping. On: open the destination
       folder (in the active Explorer tab) once the items have been grouped.
+  $name: Group Creation (Ctrl+G)
+- AutoGrouping:
   - autoGroupEnabled: true
     $name: Auto Group button
     $description: >-
@@ -374,7 +376,7 @@ hook / worker-thread design. Credit and thanks to their authors:
     $name: No Extension directory name
     $description: >-
       Folder name for files without a usable extension.
-  $name: Group Creation (Ctrl+G)
+  $name: Auto Grouping
 */
 // ==/WindhawkModSettings==
 
@@ -826,18 +828,25 @@ static void LoadSettings() {
         Wh_FreeStringSetting(groupDest);
     }
 
-    // ---- Auto Group (ADD-ON) settings. ISOLATED from the Group settings above;
-    // parsing one of these never changes a g_group* value, so existing Ctrl+G
-    // Group defaults/behaviour are untouched. LONG flags are published with
+    // ---- Auto Group settings (fix thse isseue.md Phase 7). These now live in
+    // their OWN top-level Windhawk settings category "Auto Grouping" and are read
+    // from the AutoGrouping.* path (NOT the legacy Group.* path). Windhawk keys a
+    // stored value by its full dotted path, so relocating the category resets any
+    // previously customised value to the (unchanged) documented default on first
+    // load after upgrade -- that is a Windhawk settings-API limitation, not a
+    // silent reset in this mod; the defaults below are identical to before.
+    // ISOLATED from the Group settings above; parsing one of these never changes
+    // a g_group* value, so existing Ctrl+G Group defaults/behaviour are untouched.
+    // LONG flags are published with
     // InterlockedExchange; the configurable NAMES are written under g_templatesCs
     // like g_groupDestination. The five-second delay is a fixed safety rule and
     // has no setting. Blank/whitespace names fall back to the documented default
     // so a misconfigured name can never produce an empty bucket path.
     InterlockedExchange(&g_autoGroupEnabled,
-                        Wh_GetIntSetting(L"Group.autoGroupEnabled") != 0 ? 1 : 0);
+                        Wh_GetIntSetting(L"AutoGrouping.autoGroupEnabled") != 0 ? 1 : 0);
     // Layout: a string option like `groupOperation`; unknown -> Flat (0).
     LONG autoLayout = 0;  // flat default
-    PCWSTR autoLay = Wh_GetStringSetting(L"Group.autoGroupLayout");
+    PCWSTR autoLay = Wh_GetStringSetting(L"AutoGrouping.autoGroupLayout");
     if (autoLay) {
         if (wcscmp(autoLay, L"imagesParent") == 0) {
             autoLayout = 1;
@@ -846,9 +855,9 @@ static void LoadSettings() {
     }
     InterlockedExchange(&g_autoGroupLayout, autoLayout);
     InterlockedExchange(&g_autoGroupSelectedFolders,
-                        Wh_GetIntSetting(L"Group.autoGroupSelectedFolders") != 0 ? 1 : 0);
+                        Wh_GetIntSetting(L"AutoGrouping.autoGroupSelectedFolders") != 0 ? 1 : 0);
     InterlockedExchange(&g_autoGroupNoExtension,
-                        Wh_GetIntSetting(L"Group.autoGroupNoExtension") != 0 ? 1 : 0);
+                        Wh_GetIntSetting(L"AutoGrouping.autoGroupNoExtension") != 0 ? 1 : 0);
     // Configurable folder names, each with a safe non-empty default.
     auto trimmedOrDefault = [](PCWSTR raw, const wchar_t* fallback) -> std::wstring {
         std::wstring s = raw ? raw : L"";
@@ -858,9 +867,9 @@ static void LoadSettings() {
         s = s.substr(b, e - b);
         return s.empty() ? std::wstring(fallback) : s;
     };
-    PCWSTR autoImg = Wh_GetStringSetting(L"Group.autoGroupImageParentName");
-    PCWSTR autoAll = Wh_GetStringSetting(L"Group.autoGroupFoldersName");
-    PCWSTR autoNoExt = Wh_GetStringSetting(L"Group.autoGroupNoExtensionName");
+    PCWSTR autoImg = Wh_GetStringSetting(L"AutoGrouping.autoGroupImageParentName");
+    PCWSTR autoAll = Wh_GetStringSetting(L"AutoGrouping.autoGroupFoldersName");
+    PCWSTR autoNoExt = Wh_GetStringSetting(L"AutoGrouping.autoGroupNoExtensionName");
     EnterCriticalSection(&g_templatesCs);
     g_autoGroupImageParentName = trimmedOrDefault(autoImg, L"Images");
     g_autoGroupFoldersName = trimmedOrDefault(autoAll, L"All Folder");
@@ -3254,6 +3263,136 @@ inline bool Visible(State s) { return s != State::Unavailable; }
 
 }  // namespace agcd
 
+// ---- Auto Group button APPEARANCE model (fix thse isseue.md top note) --------
+// Byte-for-byte mirror of tests/auto_group_button_logic.h. Pure.
+// Top note: "green color is not good for auto group - keep it same as group".
+// So the Auto Group button NEVER uses a dedicated green surface. Once Enabled
+// (5s safety delay elapsed) it is painted IDENTICALLY to the ordinary Group
+// button -- the same create/primary tokens. Waiting/Unavailable -> the NEUTRAL
+// (Cancel-style) secondary surface the bold M:SS countdown sits on. Caption/
+// countdown ALWAYS semibold. Derived from the SAME agcd::State the clock
+// resolves, so appearance and clickability never disagree.
+namespace agbtn {
+
+// GroupEnabled == the exact Group-button surface (create/primary tokens).
+enum class Fill { NeutralWaiting, GroupEnabled };
+
+// Enabled (safety delay elapsed) -> Group-button surface; Waiting/Unavailable
+// -> neutral Cancel-style surface the countdown sits on.
+inline Fill ResolveFill(agcd::State s) {
+    return s == agcd::State::Enabled ? Fill::GroupEnabled : Fill::NeutralWaiting;
+}
+
+// True once clickable: painted with the SAME tokens as the Group button (no
+// green). False while the safety delay counts down.
+inline bool UsesGroupFill(agcd::State s) {
+    return ResolveFill(s) == Fill::GroupEnabled;
+}
+
+// Phase 5A lists Auto Group among the semibold action labels, and the countdown
+// was already bold -- so BOTH states draw their text with the semibold UI font.
+inline bool CaptionSemibold(agcd::State) { return true; }
+
+}  // namespace agbtn
+
+// ---- Selected Items PRESENTATION-MODE model (fix thse isseue.md Phase A) -----
+// Byte-for-byte mirror of tests/view_mode_logic.h. Pure. Three Explorer-like
+// modes (List / Large icons / Extra large icons). Ctrl+Wheel zooms between them
+// (wheel up -> larger, clamped at the ends, no wrap); normal wheel scrolls and
+// Shift+wheel pans chips -- the routing helpers keep the three gestures
+// mutually exclusive. Geometry is 96-DPI base; the painter DPI-scales it. The
+// selection model/order never changes with the mode -- only presentation does.
+namespace viewmode {
+
+enum class Mode { List = 0, Large = 1, ExtraLarge = 2 };
+
+inline int ModeCount() { return 3; }
+
+inline Mode Step(Mode m, int steps) {
+    int v = static_cast<int>(m) + steps;
+    if (v < 0) v = 0;
+    if (v > 2) v = 2;
+    return static_cast<Mode>(v);
+}
+
+inline Mode OnCtrlWheel(Mode m, int wheelDelta) {
+    const int notches = wheelDelta / 120;   // truncates toward zero
+    return Step(m, notches);                // wheel up (+notches) -> larger
+}
+
+inline bool ZoomsOnWheel(bool ctrlDown) { return ctrlDown; }
+inline bool PansChipsOnWheel(bool ctrlDown, bool shiftDown) {
+    return !ctrlDown && shiftDown;
+}
+inline bool ScrollsListOnWheel(bool ctrlDown, bool shiftDown) {
+    return !ctrlDown && !shiftDown;
+}
+
+inline bool IsGrid(Mode m) { return m != Mode::List; }
+
+inline int IconPx(Mode m) {
+    switch (m) {
+        case Mode::List:       return 16;
+        case Mode::Large:      return 48;
+        case Mode::ExtraLarge: return 96;
+    }
+    return 16;
+}
+
+inline int RowHeight(Mode m) { return m == Mode::List ? 24 : 0; }
+
+inline int CellPadX(Mode m) { return IsGrid(m) ? 8 : 0; }
+inline int CellPadY(Mode m) { return IsGrid(m) ? 6 : 0; }
+inline int LabelBandH(Mode m) { return IsGrid(m) ? 30 : 0; }
+
+inline int CellW(Mode m) {
+    if (!IsGrid(m)) return 0;
+    return IconPx(m) + 2 * CellPadX(m) + (m == Mode::ExtraLarge ? 24 : 8);
+}
+inline int CellH(Mode m) {
+    if (!IsGrid(m)) return 0;
+    return IconPx(m) + 2 * CellPadY(m) + LabelBandH(m);
+}
+
+inline int Columns(Mode m, int availW) {
+    if (!IsGrid(m)) return 1;
+    const int cw = CellW(m);
+    if (cw <= 0 || availW <= 0) return 1;
+    const int c = availW / cw;
+    return c < 1 ? 1 : c;
+}
+
+inline int GridRows(int itemCount, int cols) {
+    if (cols < 1) cols = 1;
+    if (itemCount <= 0) return 0;
+    return (itemCount + cols - 1) / cols;
+}
+
+inline int VisibleGridRows(Mode m, int viewportH) {
+    const int ch = CellH(m);
+    if (ch <= 0 || viewportH <= 0) return 0;
+    return viewportH / ch;
+}
+
+inline int ContentHeight(Mode m, int itemCount, int availW) {
+    if (!IsGrid(m)) return itemCount * RowHeight(m);
+    const int cols = Columns(m, availW);
+    return GridRows(itemCount, cols) * CellH(m);
+}
+
+inline int FirstVisibleItem(Mode oldMode, int topRow, int oldCols) {
+    if (oldMode == Mode::List) return topRow;
+    return topRow * (oldCols < 1 ? 1 : oldCols);
+}
+inline int TopRowForItem(Mode newMode, int itemIndex, int newCols) {
+    if (itemIndex < 0) itemIndex = 0;
+    if (newMode == Mode::List) return itemIndex;
+    const int c = newCols < 1 ? 1 : newCols;
+    return itemIndex / c;
+}
+
+}  // namespace viewmode
+
 // ---- Auto Group classification + destination-planning model (ADD-ON) ----
 // Byte-for-byte mirror of tests/auto_group_logic.h (lines 36..497). Keep in
 // lockstep. Pure planning only -- no Win32, no filesystem; the worker calls
@@ -3804,8 +3943,12 @@ inline Thumb ThumbRect(int topRow, int itemCount, int visibleRows, int trackH,
 // ---- Visible scrollbar geometry (fix thse isseu e.md #4) ----
 // Byte-for-byte mirror of tests/list_scroll_logic.h: a reserved right-edge
 // gutter for the scrollbar track so rows never underlap the thumb.
-inline constexpr int kScrollbarW = 8;
-inline constexpr int kScrollbarPad = 2;
+// fix thse isseue.md Phase B: a more substantial thumb (gutter 14 / pad 1 ->
+// ~12px visible thumb @96dpi, spec 10-12px) + 8px breathing room between the
+// rightmost size metadata and the gutter (kMetaScrollGap).
+inline constexpr int kScrollbarW = 14;
+inline constexpr int kScrollbarPad = 1;
+inline constexpr int kMetaScrollGap = 8;
 struct Box { int left; int top; int right; int bottom; };
 inline Box TrackRect(int left, int top, int right, int bottom, int barW) {
     return Box{right - barW, top, right, bottom};
@@ -3826,6 +3969,36 @@ inline bool KeysScrollList(bool focusOnEdit, bool focusOnButton,
 }
 
 }  // namespace listscroll
+
+// ---- Selected Items scrollbar AUTO-HIDE model (fix thse isseue.md Phase B) ---
+// Byte-for-byte mirror of tests/scrollbar_autohide_logic.h. Pure. The scrollbar
+// is a display-only indicator (wheel/keys scroll the list; no draggable thumb),
+// so it auto-hides when idle and reveals while interacting / for a short window
+// after the last scroll. The GUTTER stays reserved on overflow so showing or
+// hiding the thumb never reflows the rows (no layout shift).
+namespace sbauto {
+
+inline constexpr unsigned kIdleHideMs = 1200;
+inline constexpr int kHitSlopX = 6;
+
+inline bool WithinRevealWindow(unsigned long long lastActivityTick,
+                               unsigned long long now, unsigned idleMs) {
+    if (now < lastActivityTick) return true;
+    return (now - lastActivityTick) < idleMs;
+}
+
+inline bool Visible(bool needsBar, bool dragging, bool pointerInside,
+                    bool withinReveal) {
+    if (!needsBar) return false;
+    if (dragging) return true;
+    return pointerInside || withinReveal;
+}
+
+inline bool HitTestX(int px, int gutterLeft, int gutterRight, int hitSlop) {
+    return px >= (gutterLeft - hitSlop) && px <= gutterRight;
+}
+
+}  // namespace sbauto
 
 // ---- Destination-section display model ----
 // Byte-for-byte mirror of tests/destination_logic.h (UI spec item 5).
@@ -4653,6 +4826,8 @@ struct ThemePalette {
     COLORREF cardBorder;        // section-card hairline border
     COLORREF badgeFill;         // EXT metadata pill fill (Selected Items rows)
     COLORREF badgeBorder;       // EXT metadata pill hairline border
+    // fix thse isseue.md top note: the Auto Group button reuses the shared
+    // create (Group) / cancel (neutral) tokens -- it has NO dedicated green.
 };
 
 // ---- Design colour tokens ----
@@ -4693,6 +4868,10 @@ static const COLORREF kColNeutralDarkBorder   = RGB(74, 74, 74);    // #4A4A4A
 // buttons (btn::PressTone == Green), the green counterpart to the Cancel/Close
 // red press feedback. One green source of truth; a white caption reads on it.
 static const COLORREF kColConfirmPressed      = RGB(16, 124, 16);   // #107C10 success green
+// fix thse isseue.md top note ("green color is not good for auto group - keep
+// it same as group"): the Auto Group button no longer has a dedicated green
+// palette. Once enabled it reuses the Group button's create tokens; while the
+// safety countdown runs it reuses the neutral Cancel tokens.
 // Section card surface (Phase 4/B, fix thse isseu e.md #2): an elevated surface
 // that sits ON the panel so each section reads as its OWN card, plus a subtle
 // hairline border. Light card is near-white on the #F3F3F3 panel; dark card is
@@ -5163,6 +5342,10 @@ struct NamePromptData {
     int chipFilterKind = 0;               // chipfilter::Kind as int: 0 None,1 Items,2 Folders,3 NoExt,4 Ext
     std::wstring chipFilterKey;           // normalized ext key when kind==Ext
     int chipScrollOffset = 0;             // horizontal chip-strip pan (px); INDEPENDENT of listTopRow
+    viewmode::Mode selViewMode = viewmode::Mode::List; // fix thse isseue.md Phase A: Selected Items presentation mode (List/Large/ExtraLarge); Ctrl+wheel cycles it, never changes the real selection
+    int selGridCols = 1;                  // Phase A: last painted grid column count (cached so the modal loop can preserve the first-visible item across a mode change); 1 in List mode
+    unsigned long long listSbActivityTick = 0; // fix thse isseue.md Phase B: GetTickCount64() of the last list scroll/interaction; the scrollbar stays visible for sbauto::kIdleHideMs after it, then a one-shot timer fades it
+    bool listPointerInside = false;       // Phase B: pointer currently over the Selected Items viewport (keeps the auto-hide scrollbar revealed); cleared by the idle timer
     int chipFocusIndex = -1;              // keyboard-focused chip index (-1 = none)
     int chipContentW = 0;                 // total chip-strip content width @ last paint (px)
     int chipViewportW = 0;                // chip-strip viewport width @ last paint (px)
@@ -7101,6 +7284,19 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 }
                 return 0;
             }
+            // fix thse isseue.md Phase B: one-shot Selected Items scrollbar
+            // idle-hide. The reveal window after the last scroll has elapsed;
+            // drop the pointer-inside flag and repaint the list so the tested
+            // sbauto::Visible() hides the thumb. The gutter stays reserved, so
+            // nothing reflows. One-shot (we KillTimer here) -- no repaint loop.
+            if (wParam == 113) {
+                KillTimer(hwnd, 113);
+                if (d) {
+                    d->listPointerInside = false;
+                    if (d->groupInfo) InvalidateRect(d->groupInfo, nullptr, FALSE);
+                }
+                return 0;
+            }
             break;
         }
         case WM_NCHITTEST: {
@@ -7267,7 +7463,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                   // are contiguous (was clipped to the middle Expand).
                                   ScaleDpi(L.chromeMinBtn.x, cdpi) - ScaleDpi(6, cdpi),
                                   bandH};
-                    DrawTextW(hdc, L"\U0001F4C2 Group into folder", -1, &tText,
+                    DrawTextW(hdc, L"\U0001F4C2 Group into Folder", -1, &tText,
                               DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
                     SelectObject(hdc, oldTitleF);
                 }
@@ -7703,7 +7899,18 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // card border. Applied ONCE here (the 20px card inset lives in the
                 // layout -- no double padding on the outer card).
                 const int right = rc.right - S(layout::kSelListRightInset);  // #4: inner right inset
-                const int rowH  = S(24);
+                // fix thse isseue.md Phase A: the row height follows the Selected
+                // Items presentation mode (tested viewmode:: model) -- compact in
+                // List, taller for Large / Extra large icons so the bigger Shell
+                // icon reads clearly. ALL row/scroll/scrollbar math below is
+                // parameterised by rowH, so taller rows automatically show fewer
+                // rows and enable the scrollbar via EffectiveVisibleRows -- no
+                // separate grid code path, so the existing list render, filter
+                // dimming, size badges and scroll all keep working unchanged.
+                const viewmode::Mode vmode = d->selViewMode;
+                const int rowH  = viewmode::IsGrid(vmode)
+                    ? S(viewmode::IconPx(vmode) + 16)
+                    : S(viewmode::RowHeight(vmode));
                 // fix thse isseue.md #1: EVEN "breathing space" rhythm for the
                 // Selected header -- air after the band, equal gaps between the
                 // title, the type breakdown and a THIN hairline divider, then
@@ -8007,8 +8214,14 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const bool needsBar =
                     listscroll::NeedsScrollbar(itemCount, visRows);
                 const int barW = S(listscroll::kScrollbarW);
+                // fix thse isseue.md Phase B: reserve the gutter PLUS ~8px of
+                // breathing room so the rightmost size metadata never butts
+                // against the scrollbar gutter. The gutter stays reserved
+                // whenever the list overflows, so toggling the auto-hide thumb
+                // visibility (below) never reflows the rows (no layout shift).
+                const int metaGap = needsBar ? S(listscroll::kMetaScrollGap) : 0;
                 const int rowRight =
-                    listscroll::ContentWidth(right, needsBar ? barW : 0, needsBar);
+                    listscroll::ContentWidth(right, needsBar ? (barW + metaGap) : 0, needsBar);
                 // fix thse isseue.md #1: the name column tracks the LIVE
                 // content width (rowRight already excludes the scrollbar
                 // gutter), so the genuinely-wider expanded window fills the
@@ -8055,11 +8268,19 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     // pure type/extension lookup (no disk hit); the icon handle
                     // is owned here, so DestroyIcon right after the blit. The
                     // custom vector is kept ONLY as a fallback.
-                    const int iconW   = S(icons::kRowIconW);
+                    // fix thse isseue.md Phase A: the leading icon column and the
+                    // drawn Shell icon grow with the presentation mode (List ->
+                    // Large -> Extra large) via the tested viewmode:: metrics;
+                    // List keeps the exact existing small-icon size/look.
+                    const int iconW   = viewmode::IsGrid(vmode)
+                        ? S(viewmode::IconPx(vmode) + 8)
+                        : S(icons::kRowIconW);
                     const int iconGap = S(icons::kRowIconGap);
                     RECT icr = {left, y + S(2), left + iconW, y + rowH - S(2)};
                     SHFILEINFOW rsfi = {};
-                    const int shPx = shellicon::IconPx(d->dpi);
+                    const int shPx = viewmode::IsGrid(vmode)
+                        ? S(viewmode::IconPx(vmode))
+                        : shellicon::IconPx(d->dpi);
                     if (SHGetFileInfoW(it.name.c_str(),
                                        shellicon::AttrFor(it.isFolder),
                                        &rsfi, sizeof(rsfi),
@@ -8122,7 +8343,18 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // overflows. Position/size come from the tested listscroll::
                 // model (ThumbRect over the rows region), so the existing scroll
                 // math remains the single source of truth.
-                if (needsBar) {
+                // fix thse isseue.md Phase B: AUTO-HIDE. The thumb is painted
+                // only while the pointer is inside the viewport or within the
+                // short reveal window after the last scroll (sbauto:: model); a
+                // one-shot idle timer (id 113) triggers the fade repaint. The
+                // gutter above stays reserved on overflow, so this never reflows
+                // the rows. (The thumb is display-only -- wheel/keys scroll it --
+                // so there is no drag state to keep it pinned.)
+                const bool sbWithinReveal = sbauto::WithinRevealWindow(
+                    d->listSbActivityTick, GetTickCount64(), sbauto::kIdleHideMs);
+                const bool sbVisible = sbauto::Visible(
+                    needsBar, /*dragging*/ false, d->listPointerInside, sbWithinReveal);
+                if (needsBar && sbVisible) {
                     const listscroll::Box track = listscroll::TrackRect(
                         rowRight, rowsTop, right, rc.bottom, barW);
                     const int trackH = track.bottom - track.top;
@@ -8185,10 +8417,37 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const agcd::State st =
                     agcd::Resolve(en, d->autoGroupStartTick, GetTickCount64());
                 RECT rc = dis->rcItem;
-                // Secondary (Cancel-style) surface tokens.
-                COLORREF fill = pressed ? pal.cancelFillPressed : pal.cancelFill;
-                COLORREF border = pal.cancelBorder;
-                COLORREF txt = pal.cancelText;
+                // fix thse isseue.md Phase 5A/5B: appearance follows agbtn (the
+                // mirrored pure model). ENABLED -> dedicated muted-GREEN tokens
+                // (hover nudges, pressed deepens), so the bulk-organise action
+                // reads as distinct from a normal Group; WAITING / Unavailable
+                // -> the NEUTRAL Cancel-style secondary surface the bold
+                // countdown sits on. No bare RGB() here -- only theme tokens.
+                const bool hot = (dis->itemState & ODS_HOTLIGHT) != 0;
+                COLORREF fill, border, txt;
+                if (agbtn::UsesGroupFill(st)) {
+                    // fix thse isseue.md top note ("green color is not good for
+                    // auto group - keep it same as group"): the ENABLED Auto
+                    // Group button is painted IDENTICALLY to the ordinary Group
+                    // button -- the same create/primary tokens with the SAME
+                    // hovertint hover nudge (never while pressed) -- so it reads
+                    // as a Group action and never a dedicated green surface.
+                    fill = pressed ? pal.createFillPressed : pal.createFill;
+                    border = pal.createBorder;
+                    txt = pal.createText;
+                    if (hot && !pressed) {
+                        fill = RGB(
+                            hovertint::BlendChannel(GetRValue(fill), 255, hovertint::kHoverPct),
+                            hovertint::BlendChannel(GetGValue(fill), 255, hovertint::kHoverPct),
+                            hovertint::BlendChannel(GetBValue(fill), 255, hovertint::kHoverPct));
+                    }
+                } else {
+                    // Waiting / Unavailable: neutral Cancel-style surface the
+                    // bold M:SS countdown sits on.
+                    fill = pressed ? pal.cancelFillPressed : pal.cancelFill;
+                    border = pal.cancelBorder;
+                    txt = pal.cancelText;
+                }
                 // Parent panel surface behind the square HWND corners.
                 HBRUSH pbg = CreateSolidBrush(pal.panelBg);
                 FillRect(hdc, &rc, pbg);
@@ -8222,7 +8481,10 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
                     SelectObject(hdc, ofc);
                 } else {
-                    HGDIOBJ of = SelectObject(hdc, UiFont(dpi));
+                    // fix thse isseue.md Phase 5A: the "Auto Group" caption is
+                    // SEMIBOLD (agbtn::CaptionSemibold), matching the other
+                    // action labels and the bold countdown.
+                    HGDIOBJ of = SelectObject(hdc, UiFontSemibold(dpi));
                     SetTextColor(hdc, txt);
                     DrawTextW(hdc, L"Auto Group", -1, &rc,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -8980,7 +9242,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
     if (setDpiCtx) prevDpiCtx = setDpiCtx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HWND hwnd = CreateWindowExW(
         exStyle, kClass,
-        (data.isGroup ? L"\U0001F4C2 Group into folder" : L"New folder"),
+        (data.isGroup ? L"\U0001F4C2 Group into Folder" : L"New folder"),
         winStyle,
         x, y, w, h, nullptr, nullptr, HINST_THISCOMPONENT, session.get());
     if (setDpiCtx && prevDpiCtx) setDpiCtx(prevDpiCtx);
@@ -9214,11 +9476,43 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                     RefreshGroupPanel(&data);
                 }
             }
+            // --- fix thse isseue.md Phase A: Ctrl + Mouse Wheel over the
+            // Selected Items viewport cycles the presentation mode (List ->
+            // Large icons -> Extra large icons, clamped at the ends). It NEVER
+            // scrolls the list or pans chips and NEVER changes the real Explorer
+            // selection or the Copy/Move plan. The decision is the tested
+            // viewmode:: model; listTopRow stays an item index (single-column
+            // row == item), so the first visible item is preserved across the
+            // mode change and the paint re-clamps to the new row-height's visible
+            // capacity. Ctrl beats Shift, so Ctrl+Shift+wheel zooms (never pans). ---
+            if (msg.message == WM_MOUSEWHEEL &&
+                viewmode::ZoomsOnWheel((GetKeyState(VK_CONTROL) & 0x8000) != 0)) {
+                POINT zpt = {
+                    static_cast<LONG>(static_cast<short>(LOWORD(msg.lParam))),
+                    static_cast<LONG>(static_cast<short>(HIWORD(msg.lParam)))};
+                RECT zlr = {0};
+                GetWindowRect(data.groupInfo, &zlr);   // WM_MOUSEWHEEL pt is screen-space
+                if (PtInRect(&zlr, zpt)) {
+                    const int zdelta =
+                        static_cast<int>(static_cast<short>(HIWORD(msg.wParam)));
+                    const viewmode::Mode oldMode = data.selViewMode;
+                    const viewmode::Mode newMode =
+                        viewmode::OnCtrlWheel(oldMode, zdelta);
+                    if (newMode != oldMode) {
+                        data.selViewMode = newMode;
+                        data.selGridCols = 1;   // single-column scaled-row presentation
+                        RefreshGroupPanel(&data);
+                    }
+                    continue;   // Ctrl+wheel is consumed even at the clamp ends
+                }
+            }
             // --- horizontal wheel pan over the chip strip, independent of the
             // vertical list scroll. WM_MOUSEHWHEEL and Shift+WM_MOUSEWHEEL pan
-            // horizontally via the tested chipscroll:: model. ---
-            if ((msg.message == WM_MOUSEWHEEL && (GetKeyState(VK_SHIFT) & 0x8000)) ||
-                msg.message == WM_MOUSEHWHEEL) {
+            // horizontally via the tested chipscroll:: model. Ctrl is excluded
+            // here (viewmode:: zoom owns Ctrl), matching viewmode::PansChipsOnWheel. ---
+            if ((((msg.message == WM_MOUSEWHEEL && (GetKeyState(VK_SHIFT) & 0x8000)) ||
+                 msg.message == WM_MOUSEHWHEEL)) &&
+                !(GetKeyState(VK_CONTROL) & 0x8000)) {
                 if (overChipStrip &&
                     chipscroll::NeedsScroll(data.chipContentW, data.chipViewportW)) {
                     const int raw =
@@ -9298,12 +9592,18 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 }
                 const int delta =
                     static_cast<int>(static_cast<short>(HIWORD(msg.wParam)));
+                // fix thse isseue.md Phase B: a wheel over the list reveals the
+                // auto-hiding scrollbar and (re)arms the one-shot idle-hide
+                // timer (id 113); the bar stays up for sbauto::kIdleHideMs after
+                // the last notch, then fades. Repaint even at the clamp ends so
+                // the reveal is visible.
+                data.listPointerInside = true;
+                data.listSbActivityTick = GetTickCount64();
+                SetTimer(hwnd, 113, sbauto::kIdleHideMs, nullptr);
                 const int top = listscroll::OnWheel(data.listTopRow, delta,
                                                     itemCount, visRows, 1);
-                if (top != data.listTopRow) {
-                    data.listTopRow = top;
-                    RefreshGroupPanel(&data);
-                }
+                data.listTopRow = top;
+                RefreshGroupPanel(&data);
                 continue;
             }
             const HWND fw = GetFocus();
@@ -9326,10 +9626,12 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 if (nav) {
                     const int top = listscroll::OnKey(k, data.listTopRow,
                                                       itemCount, visRows);
-                    if (top != data.listTopRow) {
-                        data.listTopRow = top;
-                        RefreshGroupPanel(&data);
-                    }
+                    // fix thse isseue.md Phase B: keyboard scrolling also reveals
+                    // the auto-hiding scrollbar and arms the idle-hide timer.
+                    data.listSbActivityTick = GetTickCount64();
+                    SetTimer(hwnd, 113, sbauto::kIdleHideMs, nullptr);
+                    data.listTopRow = top;
+                    RefreshGroupPanel(&data);
                     continue;
                 }
             }
