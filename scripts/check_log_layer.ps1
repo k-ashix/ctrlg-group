@@ -8,7 +8,7 @@
     --------------------------------------------------------------------------
     Why this exists
     --------------------------------------------------------------------------
-    explorer-ctrlfn-newfolder.wh.cpp must log ONLY through Windhawk's own Wh_Log(), whose
+    ctrlg-group.wh.cpp must log ONLY through Windhawk's own Wh_Log(), whose
     "Logging enabled" toggle is the single gate. A previous round removed a
     redundant SECOND logging layer that sat on top of Wh_Log:
 
@@ -58,7 +58,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
-$ModFile   = Join-Path $RepoRoot "explorer-ctrlfn-newfolder.wh.cpp"
+$ModFile   = Join-Path $RepoRoot "ctrlg-group.wh.cpp"
 
 if (-not (Test-Path $ModFile)) {
     Write-Host "ERROR: mod source not found at $ModFile" -ForegroundColor Red

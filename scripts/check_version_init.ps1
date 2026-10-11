@@ -1,5 +1,5 @@
 <#
-    check_version_init.ps1  --  Version / INIT consistency guard for explorer-ctrlfn-newfolder.
+    check_version_init.ps1  --  Version / INIT consistency guard for ctrlg-group.
 
     Runs automatically as part of every test run (invoked by run_tests.ps1).
     Can also be run standalone at any time:
@@ -9,7 +9,7 @@
     --------------------------------------------------------------------------
     What this checks (and why it matters)
     --------------------------------------------------------------------------
-    explorer-ctrlfn-newfolder.wh.cpp has TWO places that must always agree on the
+    ctrlg-group.wh.cpp has TWO places that must always agree on the
     version number:
 
       1. The @version metadata header  (e.g.  // @version         2.5.3)
@@ -45,7 +45,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
-$ModFile   = Join-Path $RepoRoot "explorer-ctrlfn-newfolder.wh.cpp"
+$ModFile   = Join-Path $RepoRoot "ctrlg-group.wh.cpp"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -184,7 +184,7 @@ if ($SelfTest) {
 Write-Host "=== version / INIT consistency check ===" -ForegroundColor White
 
 if (-not (Test-Path $ModFile)) {
-    Bad "explorer-ctrlfn-newfolder.wh.cpp not found at: $ModFile"
+    Bad "ctrlg-group.wh.cpp not found at: $ModFile"
     Write-Host ""
     Write-Host "VERSION/INIT CHECK: FAIL (source file missing)" -ForegroundColor Red
     exit 1

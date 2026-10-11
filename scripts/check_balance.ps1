@@ -1,7 +1,7 @@
 <#
     check_balance.ps1  --  Delimiter balance sanity check for the Windhawk mod.
 
-    Counts (), {} and [] in explorer-ctrlfn-newfolder.wh.cpp and reports whether each
+    Counts (), {} and [] in ctrlg-group.wh.cpp and reports whether each
     pair is balanced.
 
     IMPORTANT: it counts delimiters in CODE ONLY. A naive raw-text count is
@@ -28,7 +28,7 @@ $ErrorActionPreference = "Stop"
 # so the script works no matter the current working directory.
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
-$Source    = Join-Path $RepoRoot "explorer-ctrlfn-newfolder.wh.cpp"
+$Source    = Join-Path $RepoRoot "ctrlg-group.wh.cpp"
 
 if (-not (Test-Path $Source)) {
     Write-Host "ERROR: source not found at $Source" -ForegroundColor Red

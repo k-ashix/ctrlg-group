@@ -1,5 +1,5 @@
 <#
-    folder_run_tests.ps1  --  Build & run all unit tests for explorer-ctrlfn-newfolder,
+    folder_run_tests.ps1  --  Build & run all unit tests for ctrlg-group,
     then run the source/guard checks.
 
     HOW TO RUN (no arguments needed):
@@ -13,9 +13,9 @@
     does not depend on the current working directory.
 
     --------------------------------------------------------------------------
-    Why the tests are NOT linked against explorer-ctrlfn-newfolder.wh.cpp
+    Why the tests are NOT linked against ctrlg-group.wh.cpp
     --------------------------------------------------------------------------
-    explorer-ctrlfn-newfolder.wh.cpp is a Windhawk mod: it #includes Windhawk /
+    ctrlg-group.wh.cpp is a Windhawk mod: it #includes Windhawk /
     Win32 headers and has no standalone main(), so it cannot be compiled on its
     own. The pure decisions (unique folder-name numbering; the Ctrl+F+N /
     Ctrl+N / Ctrl+N+F trigger state machine) are MIRRORED into
@@ -38,11 +38,13 @@
         -SkipLogLayerCheck     skip the log-layer guard
         -SkipEmptyBodyCheck    skip the empty-body guard
         -SkipBalanceCheck      skip the delimiter balance check
+        -SkipCommentSafetyCheck skip the Windhawk comment-safety guard
         -SkipVersionInitCheck  skip the version / INIT consistency check
         -SkipRegressionCheck   skip the source-invariant regression gate
         -ShowPass              print each passing unit test to the console
         -Compiler g++          C++ compiler (default: g++)
         -Std c++17             C++ standard (default: c++17)
+        -Threads 4             parallel compile+run workers (default: 4, max: 6)
 #>
 
 [CmdletBinding()]
@@ -51,11 +53,14 @@ param(
     [switch]$SkipLogLayerCheck,
     [switch]$SkipEmptyBodyCheck,
     [switch]$SkipBalanceCheck,
+    [switch]$SkipCommentSafetyCheck,
     [switch]$SkipVersionInitCheck,
     [switch]$SkipRegressionCheck,
     [switch]$ShowPass,
     [string]$Compiler = "g++",
-    [string]$Std = "c++17"
+    [string]$Std = "c++17",
+    [ValidateRange(1, 6)]
+    [int]$Threads = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,10 +96,11 @@ function Invoke-Native([scriptblock]$block) {
     return $out
 }
 
-Emit "=== explorer-ctrlfn-newfolder :: test + guard run ===" White
+Emit "=== ctrlg-group :: test + guard run ===" White
 Emit ("Repo   : {0}" -f $RepoRoot) $null
 Emit ("Tests  : {0}" -f $TestsDir) $null
 Emit ("Compiler: {0} (std={1})" -f $Compiler, $Std) $null
+Emit ("Threads : {0} (max 6)" -f $Threads) $null
 
 # ---------------------------------------------------------------------------
 # 1. Unit tests: compile & run every tests\*_test.cpp
@@ -118,32 +124,85 @@ if (-not (Test-Path $TestsDir)) {
         $script:fails.Add("no unit tests found")
     }
 
+    # Each test is independent (self-contained .cpp -> own .exe), so compile+run
+    # is fanned out across up to $Threads parallel workers via a runspace pool.
+    # Workers share nothing and write to their own exe path; the parent collects
+    # every result and emits them in a STABLE (sorted-by-name) order so the
+    # transcript, the [PASS]/[FAIL] lines, and the CI gate stay deterministic
+    # regardless of which worker finishes first.
+    $workerBody = {
+        param($Src, $Name, $Exe, $Compiler, $Std)
+
+        function Invoke-NativeWorker([scriptblock]$block) {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            try   { $out = & $block }
+            finally { $script:workerExit = $LASTEXITCODE; $ErrorActionPreference = $prev }
+            return $out
+        }
+
+        $buildOut = Invoke-NativeWorker { & $Compiler "-std=$Std" "-Wall" $Src "-o" $Exe 2>&1 }
+        if ($script:workerExit -ne 0) {
+            return [pscustomobject]@{
+                Name = $Name; Kind = "compile"; Ok = $false; Exit = $script:workerExit
+                Output = ($buildOut | Out-String)
+            }
+        }
+
+        $runOut = Invoke-NativeWorker { & $Exe 2>&1 }
+        return [pscustomobject]@{
+            Name = $Name; Kind = "test"; Ok = ($script:workerExit -eq 0); Exit = $script:workerExit
+            Output = ($runOut | Out-String)
+        }
+    }
+
+    $pool = [runspacefactory]::CreateRunspacePool(1, $Threads)
+    $pool.Open()
+    $handles = New-Object System.Collections.Generic.List[object]
+
     foreach ($src in $testSources) {
         $name = [IO.Path]::GetFileNameWithoutExtension($src.Name)
         $exe  = Join-Path $BuildDir ($name + ".exe")
 
-        # g++ and the test exe write to stderr; capture it without letting
-        # $ErrorActionPreference = "Stop" turn native stderr into a thrown error.
-        $buildOut = Invoke-Native { & $Compiler "-std=$Std" "-Wall" $src.FullName "-o" $exe 2>&1 }
-        if ($script:nativeExit -ne 0) {
-            Emit ("  [FAIL] compile: {0}" -f $src.Name) Red
-            Emit ($buildOut | Out-String) $null
-            $script:fails.Add("compile " + $src.Name)
-            continue
-        }
+        $ps = [powershell]::Create()
+        $ps.RunspacePool = $pool
+        [void]$ps.AddScript($workerBody).
+            AddArgument($src.FullName).AddArgument($name).AddArgument($exe).
+            AddArgument($Compiler).AddArgument($Std)
 
-        $runOut = Invoke-Native { & $exe 2>&1 }
-        $code = $script:nativeExit
-        if ($code -eq 0) {
+        $handles.Add([pscustomobject]@{ PS = $ps; Async = $ps.BeginInvoke(); Name = $name })
+    }
+
+    # Collect results keyed by test name, then emit in stable name order.
+    $results = @{}
+    foreach ($h in $handles) {
+        try   { $res = $h.PS.EndInvoke($h.Async) | Select-Object -First 1 }
+        catch { $res = [pscustomobject]@{ Name = $h.Name; Kind = "worker"; Ok = $false; Exit = -1; Output = ($_ | Out-String) } }
+        finally { $h.PS.Dispose() }
+        if (-not $res) { $res = [pscustomobject]@{ Name = $h.Name; Kind = "worker"; Ok = $false; Exit = -1; Output = "no result from worker" } }
+        $results[$h.Name] = $res
+    }
+
+    $pool.Close()
+    $pool.Dispose()
+
+    foreach ($src in $testSources) {
+        $name = [IO.Path]::GetFileNameWithoutExtension($src.Name)
+        $res  = $results[$name]
+        if ($res.Ok) {
             if ($ShowPass) { Emit ("  [PASS] {0}" -f $name) Green }
             else { $script:transcript.Add("  [PASS] " + $name) }
+        } elseif ($res.Kind -eq "compile") {
+            Emit ("  [FAIL] compile: {0}.cpp" -f $name) Red
+            Emit $res.Output $null
+            $script:fails.Add("compile " + $name + ".cpp")
         } else {
-            Emit ("  [FAIL] {0} (exit {1})" -f $name, $code) Red
-            Emit ($runOut | Out-String) $null
+            Emit ("  [FAIL] {0} (exit {1})" -f $name, $res.Exit) Red
+            Emit $res.Output $null
             $script:fails.Add("test " + $name)
         }
     }
-    Emit ("  {0} unit test file(s) compiled & run" -f $testSources.Count) $null
+    Emit ("  {0} unit test file(s) compiled & run across {1} worker(s)" -f $testSources.Count, $Threads) $null
 }
 
 # ---------------------------------------------------------------------------
@@ -176,6 +235,7 @@ Section "GUARDS"
 if (-not $SkipLogLayerCheck)    { Invoke-Guard "check_log_layer.ps1"    "log-layer guard"     @("-Quiet") }
 if (-not $SkipEmptyBodyCheck)   { Invoke-Guard "check_empty_body.ps1"   "empty-body guard"    @("-Quiet") }
 if (-not $SkipBalanceCheck)     { Invoke-Guard "check_balance.ps1"      "balance check"       $null }
+if (-not $SkipCommentSafetyCheck) { Invoke-Guard "check_comment_safety.ps1" "comment-safety guard" $null }
 if (-not $SkipVersionInitCheck) { Invoke-Guard "check_version_init.ps1" "version/INIT check"  $null }
 if (-not $SkipRegressionCheck)  { Invoke-Guard "regression_check.ps1"   "regression gate"     @("-SkipUnitTests") }
 

@@ -9,7 +9,7 @@
     Why this exists
     --------------------------------------------------------------------------
     A previous round accidentally DELETED the body of three control statements
-    in explorer-ctrlfn-newfolder.wh.cpp. Statements like:
+    in ctrlg-group.wh.cpp. Statements like:
 
         if (!result.empty())
             DoSomething();
@@ -58,7 +58,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot  = Split-Path -Parent $ScriptDir
-$ModFile   = Join-Path $RepoRoot "explorer-ctrlfn-newfolder.wh.cpp"
+$ModFile   = Join-Path $RepoRoot "ctrlg-group.wh.cpp"
 
 if (-not (Test-Path $ModFile)) {
     Write-Host "ERROR: mod source not found at $ModFile" -ForegroundColor Red
