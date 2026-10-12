@@ -2,7 +2,7 @@
 // @id              ctrlg-group
 // @name            Ctrl+G to Group Folder/Files
 // @description     Ctrl+G makes Folder/Files
-// @version         0.12.61
+// @version         0.12.65
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -129,38 +129,113 @@ shortcut. **Ctrl+N** / **Ctrl+N+F** give up the "New window" shortcut.
 
 ### Ctrl+G - Group Creation (separate feature)
 
-**Ctrl+G** is a dedicated, hardwired key for **grouping** the currently selected
-files/folders into ONE destination folder. It is completely separate from the
-New Folder shortcut above and **never creates a plain folder**.
+#### What Ctrl+G does
 
-**How to use**
+**Ctrl+G** gathers the files/folders you have selected in File Explorer and puts
+them into ONE destination folder. It is completely separate from the Ctrl+F+N
+New Folder shortcut above and **never creates an empty folder** - it always
+groups the current selection.
 
-| Step | Action |
+#### Quick start
+
+1. Select any mix of files/folders in Explorer.
+2. Press **Ctrl+G**.
+3. In the popup, type a folder name, choose **Copy** or **Move**, and confirm.
+
+Virtual / non-filesystem items (*This PC*, *Quick access*, ...) and an empty
+selection are ignored safely - nothing happens.
+
+#### Choosing Copy or Move
+
+**Copy** (default) keeps the originals where they are; **Move** relocates them.
+Toggle the choice in the popup (click the segment, or focus it and press the
+Left/Right arrow keys).
+
+#### Destination and the remembered name
+
+By default items are grouped under the **current parent** of the selection. Set
+a **Fixed destination folder** in Settings to always group somewhere specific.
+If you leave the folder-name box **blank**, the last successfully used target
+name is reused. Auto Group (below) ignores the typed name entirely and uses its
+own destination policy.
+
+#### Auto Group
+
+The timed **Auto Group** button sorts the selected files into folders named
+after their extensions (`JPG`, `PNG`, `MD`, ...) with no typing. The button
+unlocks after an **eight-second safety delay** (shown as a `0:08` -> `0:01`
+countdown) so a bulk reorganise is always deliberate.
+
+- **Flat** layout creates the extension folders directly in the destination.
+- **Images parent** layout nests image extensions under an `Images` folder while
+  other extensions stay at the root.
+- Files **without an extension** go to a *No Extension* folder (optional), and
+  the originally selected folders can optionally move into an *All Folder*.
+
+#### Custom Auto Group rules
+
+Add your own buckets under **Auto Grouping -> Custom Auto Group rules**, one rule
+per line:
+
+```
+FolderName=ext1|ext2|ext3
+```
+
+Examples:
+
+- `Photos=jpg|jpeg|png|gif|webp`
+- `Documents=pdf|doc|docx|txt|md`
+- `Source Code=cpp|h|hpp|js|ts|py`
+- `Archives=zip|7z|rar|tar|gz`
+
+Matching is case-insensitive, `jpeg` collapses to `jpg` like the built-in
+buckets, and the **first** rule wins when two rules list the same extension.
+Any extension not covered by a rule still goes to its normal extension folder,
+so an empty list keeps the standard one-folder-per-extension behaviour. Folder
+names are validated (invalid characters, reserved device names, and duplicate
+rule names are rejected). Under the **Images parent** layout, a rule that mixes
+image and non-image extensions is skipped (its files use the default folders)
+to avoid an ambiguous path.
+
+#### Keyboard shortcuts (in the popup)
+
+| Key | Action |
 |---|---|
-| 1 | Select any mix of files/folders in File Explorer. |
-| 2 | Press **Ctrl+G**. |
-| 3 | In the popup: type the folder name (blank = reuse last target), pick **Copy** / **Move**, confirm. |
+| **Mouse wheel** | Scroll the Selected Items list. |
+| **Shift + wheel** | Pan the summary chips. |
+| **Ctrl + wheel** | Switch List / Large icons / Extra large icons (zooms the icon only). |
+| **Ctrl + E** | Toggle the compact / expanded content density. |
+| **Copy / Move** | Click a segment, or focus it and press Left/Right. |
+| **Tab / Shift+Tab** | Move between controls. |
+| **Enter** | Activate the focused action. |
+| **Esc** | Cancel. |
 
-**What each item type does**
+**Optional quick actions** (off by default): enable **Quick Copy/Move shortcuts
+(Ctrl+G then C or M)** in Settings. Once you have grouped into a named folder at
+least once, press **Ctrl+G** then **C** to Copy, or **Ctrl+G** then **M** to
+Move, straight to that last-used destination. If there is no remembered valid
+destination, Ctrl+G just opens the normal popup.
 
-| Selected item | What happens |
-|---|---|
-| Files & normal folders | Grouped into the destination (Copy by default, or Move). |
-| An existing destination folder | Reused, never overwritten (see *When the destination folder already exists*). |
-| A file that already exists in the destination | Handled by *When a file with the same name is already there* (Ask / Replace / Skip / Compare). |
-| Empty selection | Ignored safely - nothing happens. |
-| Virtual / non-filesystem items (*This PC*, *Quick access*, ...) | Ignored safely. |
+#### Collision handling and safety
 
-**Ctrl+G settings**
+An existing destination folder is reused, never overwritten (*When the
+destination folder already exists*: Use existing / Numbered / Cancel). A file
+that already exists in the destination is handled by *When a file with the same
+name is already there* (Ask / Replace / Skip / Compare). Cancelled or failed
+operations are reported and make no partial change.
+
+#### Ctrl+G settings reference
 
 | Setting | Default | What it does |
 |---|---|---|
 | **Group Creation (Ctrl+G)** (`groupSelection`) | ON | Master on/off; OFF hands Ctrl+G back to Explorer. |
-| **Group by Move or Copy** | Copy | Copy keeps originals, Move relocates. Toggle in the popup. |
+| **Group by Move or Copy** | Copy | Copy keeps originals, Move relocates. |
 | **When the destination folder already exists** | Use existing | Use existing / Numbered / Cancel. |
-| **When a file with the same name is already there** | Ask | Ask (native box) / Replace / Skip / Compare. |
+| **When a file with the same name is already there** | Ask | Ask / Replace / Skip / Compare. |
 | **Fixed destination folder** | *(empty)* | Always group here; blank = selection's parent. |
 | **Open destination after grouping** | OFF | ON opens the destination afterward. |
+| **Custom Auto Group rules** | *(empty)* | `FolderName=ext1|ext2` buckets for Auto Group. |
+| **Quick Copy/Move shortcuts (Ctrl+G then C or M)** | OFF | Opt-in direct Copy/Move to the last used destination. |
 
 ### vs. Windows' built-in folder creation
 
@@ -338,7 +413,7 @@ hook / worker-thread design. Credit and thanks to their authors:
       Show the timed Auto Group button in the Ctrl+G popup. Auto Group sorts the
       selected files into folders named after their extensions (JPG, PNG, MD,
       ...) without you typing a folder name. The button becomes available after
-      a five-second safety delay. Off: the button is not shown and normal Ctrl+G
+      a eight-second safety delay. Off: the button is not shown and normal Ctrl+G
       grouping is unchanged.
   - autoGroupLayout: flat
     $name: Auto Group folder layout
@@ -376,6 +451,25 @@ hook / worker-thread design. Credit and thanks to their authors:
     $name: No Extension directory name
     $description: >-
       Folder name for files without a usable extension.
+  - autoGroupCustomRules:
+    - ""
+    $name: Custom Auto Group rules
+    $description: >-
+      Optional. One rule per line as FolderName=ext1|ext2|ext3 to route those
+      file extensions into a named bucket instead of the default per-extension
+      folder (for example Photos=jpg|jpeg|png|gif or Documents=pdf|doc|docx|txt).
+      Folder names are validated, matching is case-insensitive, the first rule
+      wins when two rules claim the same extension, and files whose extension is
+      not covered still go to their normal extension folder. Leave empty for the
+      standard one-folder-per-extension behavior.
+  - quickCopyMoveShortcuts: false
+    $name: Quick Copy/Move shortcuts (Ctrl+G then C or M)
+    $description: >-
+      Off (default). On: after you have grouped into a named folder at least
+      once, press Ctrl+G then C to Copy, or Ctrl+G then M to Move, straight to
+      that last successfully used destination without retyping the name. If
+      there is no remembered valid destination, Ctrl+G just opens the normal
+      popup. Kept off by default to prevent accidental bulk operations.
   $name: Auto Grouping
 */
 // ==/WindhawkModSettings==
@@ -396,6 +490,9 @@ hook / worker-thread design. Credit and thanks to their authors:
 #include <KnownFolders.h>
 #include <ShlGuid.h>
 #include <UIAutomation.h>
+#include <commctrl.h>        // ILD_TRANSPARENT (image-list draw flags)
+#include <commoncontrols.h>  // IImageList (Phase 1 hi-res icons); use __uuidof(IImageList) (its IID_IImageList constant is not in Windhawk clang's uuid lib)
+#include <utility>           // std::pair (Phase 1 per-popup icon cache)
 
 // Libraries are linked via @compilerOptions at the top of this file. Windhawk
 // compiles with clang, so MSVC-style link pragmas are intentionally omitted.
@@ -480,7 +577,7 @@ static std::wstring g_groupDestination;                // groupDestination (fixe
 // folder templates. LONG flags are read via AtomicGet / written via
 // InterlockedExchange like the other Group flags; the configurable NAMES are
 // std::wstring guarded by the same g_templatesCs lock that protects
-// g_groupDestination. The five-second button delay is a FIXED safety rule and
+// g_groupDestination. The eight-second button delay is a FIXED safety rule and
 // is intentionally NOT a user setting. Defaults mirror autogroup::Settings in
 // tests/auto_group_logic.h.
 static volatile LONG g_autoGroupEnabled = 1;           // autoGroupEnabled: 1 = show the Auto Group button (default), 0 = hidden
@@ -490,6 +587,8 @@ static volatile LONG g_autoGroupNoExtension = 1;       // autoGroupNoExtension: 
 static std::wstring g_autoGroupImageParentName;        // autoGroupImageParentName (default "Images")
 static std::wstring g_autoGroupFoldersName;            // autoGroupFoldersName (default "All Folder")
 static std::wstring g_autoGroupNoExtensionName;        // autoGroupNoExtensionName (default "No Extension")
+static std::vector<std::wstring> g_autoGroupCustomRuleLines;  // autoGroupCustomRules: raw "Folder=ext|ext" lines (Phase 6), parsed at group time
+static volatile LONG g_quickCopyMoveShortcuts = 0;    // quickCopyMoveShortcuts (Phase 4): 0 = off (default), 1 = opt-in Ctrl+G then C/M quick actions
 // #8: the last destination Ctrl+G actually grouped into. WORKER-THREAD-LOCAL
 // (only read/written inside the WM_APP_GROUP handler), so no lock is needed. A
 // blank folder name in the Group popup reuses this, mirroring ResolveGroupTarget
@@ -839,7 +938,7 @@ static void LoadSettings() {
     // a g_group* value, so existing Ctrl+G Group defaults/behaviour are untouched.
     // LONG flags are published with
     // InterlockedExchange; the configurable NAMES are written under g_templatesCs
-    // like g_groupDestination. The five-second delay is a fixed safety rule and
+    // like g_groupDestination. The eight-second delay is a fixed safety rule and
     // has no setting. Blank/whitespace names fall back to the documented default
     // so a misconfigured name can never produce an empty bucket path.
     InterlockedExchange(&g_autoGroupEnabled,
@@ -878,6 +977,31 @@ static void LoadSettings() {
     if (autoImg) Wh_FreeStringSetting(autoImg);
     if (autoAll) Wh_FreeStringSetting(autoAll);
     if (autoNoExt) Wh_FreeStringSetting(autoNoExt);
+
+    // Phase 6: custom Auto Group rules. Windhawk string arrays are read until
+    // the first empty entry; the empty default slot yields no rules, so the
+    // standard one-folder-per-extension behaviour is unchanged. The raw
+    // "Folder=ext|ext" lines are validated/parsed by autogroup::ParseCustomRules
+    // at Auto Group time (see the worker). Capped generously here; the parser
+    // enforces the documented rule/extension limits.
+    std::vector<std::wstring> customRuleLines;
+    for (int i = 0; i < 1000; ++i) {
+        PCWSTR cr = Wh_GetStringSetting(L"AutoGrouping.autoGroupCustomRules[%d]", i);
+        if (!cr || !cr[0]) {
+            if (cr) Wh_FreeStringSetting(cr);
+            break;
+        }
+        customRuleLines.emplace_back(cr);
+        Wh_FreeStringSetting(cr);
+    }
+    EnterCriticalSection(&g_templatesCs);
+    g_autoGroupCustomRuleLines = std::move(customRuleLines);
+    LeaveCriticalSection(&g_templatesCs);
+
+    // Phase 4: opt-in Ctrl+G -> C/M quick actions. Default OFF so normal Ctrl+G
+    // behaviour is completely unchanged unless the user explicitly turns it on.
+    InterlockedExchange(&g_quickCopyMoveShortcuts,
+                        Wh_GetIntSetting(L"AutoGrouping.quickCopyMoveShortcuts") != 0 ? 1 : 0);
 
     // Type-speed preset (0=Normal, 1=Relaxed, 2=Patient). Read as a string
     // option like `trigger`; any unknown value maps to Normal.
@@ -2668,6 +2792,9 @@ struct PromptLayout {
     Rect autoGroupButton; // bottom action row (ADD-ON): timed Auto Group button,
                           // left of Create/Group. Zero-size when Auto Group is
                           // disabled in settings (button not created).
+    // fix thse isseue.md UI-03: footer INFO / help button (square, pinned to the
+    // LEFT end of the action row). Drives the themed help panel (infohelp model).
+    Rect infoButton;
 };
 
 inline int ScaleForDpi(int value96, int dpi) {
@@ -2693,7 +2820,7 @@ inline constexpr int kButtonW        = 74;
 inline constexpr int kButtonH        = 30;
 inline constexpr int kButtonGap      = 8;   // fix #13: 4px-grid gap (was 6)
 inline constexpr int kAutoGroupBtnW  = 108; // ADD-ON: wider footer button so
-                                            // "Auto Group (5)" fits; fixed width
+                                            // "Auto Group (8)" fits; fixed width
                                             // so the row never reflows per second
 inline constexpr int kLabelTop       = 18;
 inline constexpr int kFieldTop       = 46;
@@ -2890,7 +3017,7 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     L.cancelButton = Rect{cancelX2, rowY, kButtonW, kButtonH};
 
     // ADD-ON: the timed Auto Group button sits LEFT of Group/Create, so the
-    // bottom row reads [Auto Group (5)] [Group] [Cancel]. Its label is wider
+    // bottom row reads [Auto Group (8)] [Group] [Cancel]. Its label is wider
     // than the 74px standard button, so give it kAutoGroupBtnW. The rect is
     // always computed (pure geometry); WM_CREATE only CREATES the control when
     // Auto Group is enabled in settings. The width is fixed and independent of
@@ -2901,7 +3028,92 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
         L.autoGroupButton = Rect{autoX, rowY, autoW, kButtonH};
     }
 
+    // fix thse isseue.md UI-03: the footer INFO/help button is a square control
+    // pinned to the LEFT end of the action row (the actions stay right-aligned).
+    L.infoButton = Rect{kOuterMargin, rowY, kButtonH, kButtonH};
+
     L.windowH = rowY + kButtonH + kGroupBottomMargin;
+    return L;
+}
+
+// fix thse isseue.md UI-01 / UI-05: responsive reflow. ComputePromptLayout()
+// returns the popup at its PREFERRED compact/expanded size; when the user
+// maximizes or drag-resizes the Group popup the window procedure's WM_SIZE /
+// WM_EXITSIZEMOVE handler reflows the children into the ACTUAL client rect
+// through THIS pure transform, so the form never stays stranded at the fixed
+// size in the upper-left corner. Contract:
+//   * the content stretches to the client WIDTH (cards/fields widen; the
+//     right-anchored chrome + action controls stay flush with the new edge),
+//   * the Selected Items card absorbs the extra HEIGHT and every section below
+//     it shifts down by the same amount, so the Destination / Folder-name /
+//     Action sections and the footer track the client bottom and stay VISIBLE,
+//   * the client is clamped to (minW,minH) so controls are never crushed,
+//   * New Folder is never reflowed (its bare geometry is preserved).
+// Byte-for-byte mirror of tests/layout_logic.h ReflowToClient (this source copy
+// additionally shifts the Auto Group add-on button, which the test struct omits).
+inline PromptLayout ReflowToClient(const PromptLayout& base,
+                                   int clientW, int clientH,
+                                   int minW, int minH) {
+    PromptLayout L = base;
+    if (!base.isGroup) return L;              // New Folder keeps its fixed form
+    if (clientW < minW) clientW = minW;
+    if (clientH < minH) clientH = minH;
+
+    const int dx = clientW - base.windowW;    // extra width to distribute
+    int dy = clientH - base.windowH;          // extra height to distribute
+    // Never shrink the Selected Items card below a readable floor: keep the
+    // footer reachable rather than letting the lower cards overlap it.
+    const int kMinSelReflowH = 40;
+    if (base.selectedContent.h + dy < kMinSelReflowH)
+        dy = kMinSelReflowH - base.selectedContent.h;
+
+    L.windowW = clientW;
+    L.windowH = clientH;
+
+    const auto widen  = [dx](Rect& r) { if (r.w > 0) r.w += dx; };
+    const auto moveX  = [dx](Rect& r) { if (r.w > 0) r.x += dx; };
+    const auto shiftY = [dy](Rect& r) { if (r.w > 0) r.y += dy; };
+
+    // Stretch the full-width cards / fields / descriptions to the client width.
+    widen(L.selectedCard);  widen(L.selectedHeader); widen(L.selectedList);
+    widen(L.selectedContent); widen(L.groupHeader);
+    widen(L.destCard); widen(L.destLabel); widen(L.destDesc); widen(L.destField);
+    widen(L.nameCard); widen(L.nameLabel); widen(L.nameDesc); widen(L.nameField);
+    widen(L.actionCard); widen(L.actionTitle); widen(L.actionDesc); widen(L.keyboardHint);
+
+    // Right-anchored controls move right so they stay flush with the new edge.
+    moveX(L.chromeSizeBtn); moveX(L.chromeMinBtn); moveX(L.chromeCloseBtn);
+    moveX(L.destCopyBtn); moveX(L.createButton); moveX(L.cancelButton);
+    moveX(L.autoGroupButton);
+
+    // Copy/Move segmented control: a LEFT-anchored, full-inner-width pair, NOT a
+    // right-anchored control. It stays flush with the card's left inset and
+    // STRETCHES to the new inner width (widening with the card) instead of
+    // floating off to the right edge and leaving a gap. The two halves still
+    // meet edge-to-edge so they read as one seamless pill. opToggle (the compact
+    // single-button variant) just stays left-anchored.
+    {
+        const int segLeft   = base.segCopy.x;                     // card inner-left inset
+        const int newInnerW = (base.segMove.right() - segLeft) + dx;
+        const int newHalf   = newInnerW / 2;
+        L.segCopy.x = segLeft;             L.segCopy.w = newHalf;              L.segCopy.y += dy;
+        L.segMove.x = segLeft + newHalf;   L.segMove.w = newInnerW - newHalf;  L.segMove.y += dy;
+        L.opToggle.x = segLeft;            L.opToggle.y += dy;
+    }
+
+    // The Selected Items card absorbs the extra height; everything below it
+    // shifts down by the same amount so the footer tracks the client bottom.
+    L.selectedCard.h    += dy;
+    L.selectedList.h    += dy;
+    L.selectedContent.h += dy;
+    L.groupHeader.h     += dy;
+    shiftY(L.destCard); shiftY(L.destLabel); shiftY(L.destDesc);
+    shiftY(L.destField); shiftY(L.destCopyBtn);
+    shiftY(L.nameCard); shiftY(L.nameLabel); shiftY(L.nameDesc); shiftY(L.nameField);
+    shiftY(L.actionCard); shiftY(L.actionTitle); shiftY(L.actionDesc);
+    shiftY(L.keyboardHint);   // segCopy/segMove/opToggle shifted in the block above
+    shiftY(L.createButton); shiftY(L.cancelButton); shiftY(L.autoGroupButton);
+    shiftY(L.infoButton);   // UI-03: left-anchored, so it only tracks the footer DOWN
     return L;
 }
 
@@ -3189,7 +3401,7 @@ inline long long ChooseSizeBytes(long long logicalBytes, long long allocatedByte
 
 }  // namespace sel
 
-// ---- Auto Group five-second countdown state model (ADD-ON) ----
+// ---- Auto Group eight-second countdown state model (ADD-ON) ----
 // Byte-for-byte mirror of tests/auto_group_countdown_logic.h. Keep in lockstep.
 // Pure: takes a MONOTONIC tick (the mod feeds GetTickCount64()) + the popup's
 // start tick, so a stalled/busy message loop or a delayed WM_TIMER can never
@@ -3199,13 +3411,13 @@ namespace agcd {
 
 enum class State {
     Unavailable,  // Auto Group disabled in settings -> button not shown/active
-    Waiting,      // within the 5s safety delay -> disabled, shows a countdown
-    Enabled,      // 5s elapsed -> clickable "Auto Group"
+    Waiting,      // within the 8s safety delay -> disabled, shows a countdown
+    Enabled,      // 8s elapsed -> clickable "Auto Group"
 };
 
-inline unsigned long long DelayMs() { return 5000; }
+inline unsigned long long DelayMs() { return 8000; }
 
-inline int TotalSeconds() { return 5; }
+inline int TotalSeconds() { return 8; }
 
 inline State Resolve(bool enabledSetting, unsigned long long startTick, unsigned long long nowTick) {
     if (!enabledSetting) return State::Unavailable;
@@ -3235,7 +3447,7 @@ inline std::wstring Label(State s, int remainingSeconds) {
 // fix thse isseue.md #5: STABLE M:SS countdown shown inside the button during
 // the delay (minutes:seconds, seconds zero-padded, NO milliseconds). Driven by
 // the whole-second RemainingSeconds value so the text changes at most once a
-// second: 0:05, 0:04, 0:03, 0:02, 0:01.
+// second: 0:08, 0:07, 0:06, 0:05, 0:04, 0:03, 0:02, 0:01.
 inline std::wstring CountdownText(int remainingSeconds) {
     if (remainingSeconds < 0) remainingSeconds = 0;
     const int m = remainingSeconds / 60;
@@ -3263,11 +3475,78 @@ inline bool Visible(State s) { return s != State::Unavailable; }
 
 }  // namespace agcd
 
+// ---- Opt-in Ctrl+G -> C/M quick-action two-stroke model (fix thse isseue.md
+// Phase 4) ----
+// Byte-for-byte mirror of tests/quick_action_logic.h. Pure + monotonic-tick
+// based; designed to run INSIDE the LL keyboard hook WITHOUT ever blocking (no
+// Sleep, no wait). It arms ONLY when the feature is enabled AND a remembered
+// valid target exists; a quick op fires ONLY on an explicit C/M inside the
+// window; any other key or a timeout opens the ordinary popup and NEVER loses
+// that key; cancel / modifier release / unload disarm with no action, so a
+// quick op can never fire by accident or twice.
+namespace qseq {
+
+enum class Action { None, OpenPopup, QuickCopy, QuickMove };
+enum class Key { Other, C, M };
+enum class Phase { Idle, Armed };
+
+inline unsigned long long WindowMs() { return 1500; }
+
+struct State {
+    Phase phase = Phase::Idle;
+    unsigned long long armedTick = 0;
+};
+
+struct Decision {
+    Action action = Action::None;
+    State next;
+    bool consumeKey = false;
+};
+
+inline bool Armed(const State& s) { return s.phase == Phase::Armed; }
+
+inline bool Expired(const State& s, unsigned long long nowTick) {
+    if (s.phase != Phase::Armed) return false;
+    const unsigned long long elapsed = (nowTick >= s.armedTick) ? (nowTick - s.armedTick) : 0;
+    return elapsed >= WindowMs();
+}
+
+inline Decision OnCtrlG(bool enabled, bool hasValidTarget, unsigned long long nowTick) {
+    Decision d;
+    if (!enabled || !hasValidTarget) { d.action = Action::OpenPopup; return d; }
+    d.next.phase = Phase::Armed;
+    d.next.armedTick = nowTick;
+    d.action = Action::None;
+    d.consumeKey = true;
+    return d;
+}
+
+inline Decision OnKey(const State& s, Key key, unsigned long long nowTick) {
+    Decision d;
+    if (s.phase != Phase::Armed) return d;
+    if (Expired(s, nowTick)) { d.action = Action::OpenPopup; return d; }
+    if (key == Key::C) { d.action = Action::QuickCopy; d.consumeKey = true; return d; }
+    if (key == Key::M) { d.action = Action::QuickMove; d.consumeKey = true; return d; }
+    d.action = Action::OpenPopup;
+    return d;
+}
+
+inline Decision OnTimeout(const State& s, unsigned long long nowTick) {
+    Decision d;
+    if (s.phase == Phase::Armed && Expired(s, nowTick)) { d.action = Action::OpenPopup; return d; }
+    d.next = s;
+    return d;
+}
+
+inline Decision Reset(const State& /*s*/) { return Decision{}; }
+
+}  // namespace qseq
+
 // ---- Auto Group button APPEARANCE model (fix thse isseue.md top note) --------
 // Byte-for-byte mirror of tests/auto_group_button_logic.h. Pure.
 // Top note: "green color is not good for auto group - keep it same as group".
 // So the Auto Group button NEVER uses a dedicated green surface. Once Enabled
-// (5s safety delay elapsed) it is painted IDENTICALLY to the ordinary Group
+// (8s safety delay elapsed) it is painted IDENTICALLY to the ordinary Group
 // button -- the same create/primary tokens. Waiting/Unavailable -> the NEUTRAL
 // (Cancel-style) secondary surface the bold M:SS countdown sits on. Caption/
 // countdown ALWAYS semibold. Derived from the SAME agcd::State the clock
@@ -3347,7 +3626,9 @@ inline int LabelBandH(Mode m) { return IsGrid(m) ? 30 : 0; }
 
 inline int CellW(Mode m) {
     if (!IsGrid(m)) return 0;
-    return IconPx(m) + 2 * CellPadX(m) + (m == Mode::ExtraLarge ? 24 : 8);
+    // Constant 8px horizontal breathing for EVERY grid mode: Ctrl+wheel zoom
+    // grows only the icon (IconPx), never the surrounding padding or text area.
+    return IconPx(m) + 2 * CellPadX(m) + 8;
 }
 inline int CellH(Mode m) {
     if (!IsGrid(m)) return 0;
@@ -3673,6 +3954,186 @@ inline DestResult ResolveAutoDest(const std::vector<SrcItem>& items,
 // #5  Deterministic plan.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Phase 6: Custom Auto Group rules. A rule routes files whose extension matches
+// into a NAMED output bucket instead of the default per-extension folder. Each
+// rule is one string "FolderName=ext1|ext2|ext3". Pure + unit-tested; no
+// filesystem access and NO dependency on the New Folder template settings.
+//   - Empty rule list -> behaviour is unchanged (no rule ever matches).
+//   - Unmatched exts   -> still go to their canonical per-extension folder.
+//   - Matching is case-insensitive; jpeg/jpe collapse to jpg like CanonicalKey.
+//   - First valid rule wins when two rules claim the same extension.
+//   - Folder names validated with SanitizeBucketName (reserved/invalid/empty
+//     rejected); a duplicate rule folder name is rejected (ambiguous target).
+//   - Documented caps clamp the rule and per-rule extension counts.
+// ---------------------------------------------------------------------------
+
+inline std::size_t MaxCustomRules() { return 64u; }
+inline std::size_t MaxExtsPerRule() { return 64u; }
+
+enum class RuleImageClass { AllNonImage, AllImage, Mixed };
+
+struct CustomRule {
+    std::wstring folder;                  // sanitized bucket folder name
+    std::vector<std::wstring> keys;       // canonical lowercase ext keys (deduped)
+    RuleImageClass imageClass = RuleImageClass::AllNonImage;
+};
+
+enum class RuleReject {
+    None,
+    Malformed,        // no '=', empty folder, or empty extension list
+    BadFolderName,    // folder failed SanitizeBucketName
+    DuplicateFolder,  // a later rule reuses an earlier rule's folder name
+    LimitReached,     // rule / extension cap hit (extras dropped)
+};
+
+struct RuleRejectLog {
+    std::wstring text;                    // offending raw line
+    RuleReject reason = RuleReject::None;
+};
+
+struct ParsedRules {
+    std::vector<CustomRule> rules;              // valid, first-seen order
+    std::vector<std::wstring> dupExtDropped;    // ext keys ignored (first rule wins)
+    std::vector<RuleRejectLog> rejected;        // rejected lines, for the log
+    bool empty() const { return rules.empty(); }
+};
+
+// Canonicalize an extension TOKEN exactly as CanonicalKey normalizes a file's
+// extension (lowercase, drop a leading dot, jpeg/jpe -> jpg) so a rule token
+// matches the key a real file of that type produces.
+inline std::wstring CanonicalizeExtToken(const std::wstring& token) {
+    std::wstring key = NormKey(token);
+    if (key == L"jpeg" || key == L"jpe") key = L"jpg";
+    return key;
+}
+
+// Split "Folder=ext1|ext2" into folder + raw ext tokens. Returns false when the
+// line has no '='. Blanks on the folder are left for the sanitizer; empty ext
+// tokens are dropped by the caller.
+inline bool SplitRuleLine(const std::wstring& line, std::wstring& folderOut,
+                          std::vector<std::wstring>& extTokensOut) {
+    folderOut.clear();
+    extTokensOut.clear();
+    const std::wstring::size_type eq = line.find(L'=');
+    if (eq == std::wstring::npos) return false;
+    folderOut = line.substr(0, eq);
+    const std::wstring rest = line.substr(eq + 1);
+    std::wstring cur;
+    for (wchar_t c : rest) {
+        if (c == L'|') { extTokensOut.push_back(cur); cur.clear(); }
+        else cur.push_back(c);
+    }
+    extTokensOut.push_back(cur);
+    return true;
+}
+
+// Classify a rule's canonical keys as all-image / all-non-image / mixed.
+inline RuleImageClass ClassifyRuleKeys(const std::vector<std::wstring>& keys) {
+    bool anyImg = false, anyNon = false;
+    for (const auto& k : keys) {
+        if (IsImageKey(k)) anyImg = true; else anyNon = true;
+    }
+    if (anyImg && anyNon) return RuleImageClass::Mixed;
+    return anyImg ? RuleImageClass::AllImage : RuleImageClass::AllNonImage;
+}
+
+// Parse the raw settings array (one "Folder=ext|ext" per entry) into validated
+// rules plus a log of everything ignored. Blank entries are skipped silently
+// (the empty default slot). First rule wins on a duplicate extension.
+inline ParsedRules ParseCustomRules(const std::vector<std::wstring>& rawLines) {
+    ParsedRules out;
+    auto folderTaken = [&](const std::wstring& f) {
+        for (const auto& r : out.rules) if (PathEqualCI(r.folder, f)) return true;
+        return false;
+    };
+    auto extTaken = [&](const std::wstring& k) {
+        for (const auto& r : out.rules)
+            for (const auto& e : r.keys) if (e == k) return true;
+        return false;
+    };
+
+    for (const auto& rawLine : rawLines) {
+        bool blank = true;
+        for (wchar_t c : rawLine) if (c != L' ' && c != L'\t') { blank = false; break; }
+        if (blank) continue;
+
+        if (out.rules.size() >= MaxCustomRules()) {
+            out.rejected.push_back({rawLine, RuleReject::LimitReached});
+            continue;
+        }
+
+        std::wstring folderRaw;
+        std::vector<std::wstring> tokens;
+        if (!SplitRuleLine(rawLine, folderRaw, tokens)) {
+            out.rejected.push_back({rawLine, RuleReject::Malformed});
+            continue;
+        }
+
+        SanitizeResult fsan = SanitizeBucketName(folderRaw);
+        if (!fsan.ok) {
+            out.rejected.push_back({rawLine, RuleReject::BadFolderName});
+            continue;
+        }
+        if (folderTaken(fsan.name)) {
+            out.rejected.push_back({rawLine, RuleReject::DuplicateFolder});
+            continue;
+        }
+
+        CustomRule rule;
+        rule.folder = fsan.name;
+        for (const auto& tok : tokens) {
+            const std::wstring key = CanonicalizeExtToken(tok);
+            if (key.empty()) continue;                 // drop empty ext token
+            if (rule.keys.size() >= MaxExtsPerRule()) {
+                out.rejected.push_back({rawLine, RuleReject::LimitReached});
+                break;
+            }
+            bool already = extTaken(key);
+            for (const auto& e : rule.keys) if (e == key) already = true;
+            if (already) { out.dupExtDropped.push_back(key); continue; }
+            rule.keys.push_back(key);
+        }
+
+        if (rule.keys.empty()) {
+            out.rejected.push_back({rawLine, RuleReject::Malformed});
+            continue;
+        }
+        rule.imageClass = ClassifyRuleKeys(rule.keys);
+        out.rules.push_back(rule);
+    }
+    return out;
+}
+
+// Match a file's canonical key against the parsed rules. `imagesParentEnabled`
+// gates the one layout-dependent safety rule: a MIXED-image rule is ambiguous
+// under the Images-parent layout, so it is NOT honored there (the file falls
+// back to its default per-extension bucket). In Flat mode image-ness is
+// irrelevant, so a mixed rule routes normally.
+struct RuleMatch {
+    bool matched = false;
+    std::wstring folder;
+    bool isImage = false;
+};
+inline RuleMatch MatchCustomRule(const ParsedRules& pr,
+                                 const std::wstring& canonicalKey,
+                                 bool imagesParentEnabled) {
+    RuleMatch m;
+    for (const auto& r : pr.rules) {
+        for (const auto& k : r.keys) {
+            if (k != canonicalKey) continue;
+            if (imagesParentEnabled && r.imageClass == RuleImageClass::Mixed) {
+                return m;   // ambiguous under Images-parent -> fall back
+            }
+            m.matched = true;
+            m.folder = r.folder;
+            m.isImage = (r.imageClass == RuleImageClass::AllImage);
+            return m;
+        }
+    }
+    return m;
+}
+
 enum class Layout { Flat, ImagesParent };
 
 // ---------------------------------------------------------------------------
@@ -3708,6 +4169,7 @@ struct Settings {
     bool noExtensionEnabled = true;           // put extensionless files in a bucket
     std::wstring noExtensionName = L"No Extension";
     bool isMove = true;                        // Copy/Move for FILES
+    ParsedRules customRules;                   // Phase 6: optional extension->folder rules
 };
 
 // One planned file move/copy: a source file routed into a destination directory.
@@ -3802,13 +4264,19 @@ inline Plan BuildPlan(const std::vector<SrcItem>& items,
             continue;
         }
 
-        const std::wstring bucket = Upper(key);
+        // Phase 6: a custom rule may override the default per-extension bucket
+        // for this file's extension (first matching rule wins). A mixed-image
+        // rule is ignored under Images-parent layout (handled in the matcher),
+        // so a match here is uniformly image or non-image.
+        const RuleMatch cr = MatchCustomRule(s.customRules, key,
+                                             s.layout == Layout::ImagesParent);
+        const std::wstring bucket = cr.matched ? cr.folder : Upper(key);
         SanitizeResult san = SanitizeBucketName(bucket);
         if (!san.ok) {
             plan.skipped.push_back({it.path, Skip::Rejected});
             continue;
         }
-        const bool img = IsImageKey(key);
+        const bool img = cr.matched ? cr.isImage : IsImageKey(key);
         // In ImagesParent mode an image bucket also needs the parent name valid.
         if (s.layout == Layout::ImagesParent && img && !imgSan.ok) {
             plan.skipped.push_back({it.path, Skip::Rejected});
@@ -3999,6 +4467,57 @@ inline bool HitTestX(int px, int gutterLeft, int gutterRight, int hitSlop) {
 }
 
 }  // namespace sbauto
+
+// ---- Footer INFORMATION / help button model (fix thse isseue.md Phase C) -----
+// Byte-for-byte mirror of tests/info_help_logic.h. Pure. Single source of truth
+// for the footer info button's accessible name, the SUMMARIZED single-line help
+// content (top note: a summarized info button, 5-6 single lines), the hover +
+// click-to-pin open/close state machine (sliding the pointer from the button
+// into the popup must not dismiss it), and the footer-fit math so the button
+// never pushes [Auto Group] [Group] [Cancel] off the popup. The live footer
+// button + lightweight help popup are wired to THESE functions.
+namespace infohelp {
+
+inline const wchar_t* AccessibleName() { return L"Keyboard and navigation help"; }
+
+inline int LineCount() { return 5; }
+inline const wchar_t* Line(int i) {
+    switch (i) {
+        case 0: return L"Mouse wheel: scroll the selected items";
+        case 1: return L"Shift + Wheel: scroll the summary chips";
+        case 2: return L"Ctrl + Wheel: List / Large / Extra large icons";
+        case 3: return L"Copy / Move: click, or Left / Right when focused";
+        case 4: return L"Tab: move focus   Enter: activate   Esc: cancel";
+    }
+    return L"";
+}
+
+enum class Vis { Hidden, Shown, Pinned };
+
+inline Vis OnClick(Vis v) { return v == Vis::Pinned ? Vis::Hidden : Vis::Pinned; }
+inline Vis OnHoverEnter(Vis v) { return v == Vis::Hidden ? Vis::Shown : v; }
+
+inline bool StaysOpen(Vis v, bool pointerOnTrigger, bool pointerOnPopup) {
+    if (v == Vis::Pinned) return true;
+    if (v == Vis::Hidden) return false;
+    return pointerOnTrigger || pointerOnPopup;
+}
+
+inline Vis OnPointerUpdate(Vis v, bool pointerOnTrigger, bool pointerOnPopup) {
+    if (v == Vis::Shown && !StaysOpen(v, pointerOnTrigger, pointerOnPopup))
+        return Vis::Hidden;
+    return v;
+}
+
+inline Vis OnDismiss(Vis) { return Vis::Hidden; }
+
+inline bool FooterFitsWithInfo(int footerW, int infoW, int gap, int actionsW) {
+    return (infoW + gap + actionsW) <= footerW;
+}
+
+inline int InfoButtonSize(int buttonH) { return buttonH; }
+
+}  // namespace infohelp
 
 // ---- Destination-section display model ----
 // Byte-for-byte mirror of tests/destination_logic.h (UI spec item 5).
@@ -5314,6 +5833,9 @@ struct NamePromptData {
     HWND destLabel = nullptr;             // Destination card label (Group only)
     HWND destField = nullptr;             // Destination read-only field (Group only)
     HWND destCopyBtn = nullptr;           // Destination "copy path" button (id 111, Group only)
+    HWND infoBtn = nullptr;               // fix thse isseue.md UI-03: footer INFO/help button (id 121, Group only)
+    HWND helpPanel = nullptr;             // fix thse isseue.md UI-03/UI-06: themed help surface (SS_OWNERDRAW id 122, shown on click)
+    int  helpVis = 0;                     // infohelp::Vis for the help panel (0=Hidden, 1=Shown, 2=Pinned)
     HWND createBtn = nullptr;             // Create button (relayout target, Phase 7)
     HWND cancelBtn = nullptr;             // Cancel button (relayout target, Phase 7)
     HWND sizeToggle = nullptr;            // compact/expanded titlebar toggle (id 103, Group only)
@@ -5355,6 +5877,19 @@ struct NamePromptData {
     std::vector<std::wstring> chipHitKey; // ext key per chip (empty unless Ext), parallel to chipHitRects
     bool showExtLastPainted = false;      // last showExt state the toggle control reflected
     RECT chipToggleRect = {0, 0, 0, 0};   // fix thse isseue.md #3: Show-extensions toggle hit rect (list client coords)
+    bool manualSized = false;             // fix thse isseue.md Phase 3: the user has resized or maximized the popup, so the layout must NOT force it back to the fixed compact/expanded size (density toggles then only reflow content)
+
+    // fix thse isseue.md Phase 1: per-popup cache of high-resolution Shell icon
+    // handles, keyed by iconsrc::CacheKey(type, tier, dpi). Scrolling and
+    // zooming reuse ONE extracted source instead of re-extracting a lower-res
+    // copy every paint; every HICON is released on popup teardown so repeated
+    // zoom/scroll never leaks a GDI handle. (scroll offset / view mode are NOT
+    // part of the key, so they stay independent of icon resolution.)
+    std::vector<std::pair<std::wstring, HICON>> iconCache;
+    ~NamePromptData() {
+        for (auto& kv : iconCache)
+            if (kv.second) DestroyIcon(kv.second);
+    }
 };
 
 // EditParentIsGroup definition (forward-declared above, next to the inputfield
@@ -5484,13 +6019,30 @@ static void RefreshGroupPanel(NamePromptData* d) {
 // popup by the same model -- mirroring exactly how the window was first sized.
 // Expanded only enlarges the Group Selected Items viewport; New Folder geometry
 // is unaffected (extra == 0). Focus is left untouched (SWP_NOACTIVATE).
-static void ApplyPromptLayout(HWND hwnd, NamePromptData* d) {
+// fix thse isseue.md v0.12.65 Bug 1: forward declaration of the single
+// authoritative "effective layout" (defined just after the winresize helpers it
+// relies on). ApplyPromptLayout, WM_ERASEBKGND and WM_NCHITTEST all consume it,
+// so paint, hit-test and child-move can never disagree about the live geometry.
+static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptData* d);
+
+static void ApplyPromptLayout(HWND hwnd, NamePromptData* d,
+                              const layout::PromptLayout* reflowOverride = nullptr) {
     if (!d) return;
     const UINT dpi = d->dpi;
     auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
-    const layout::PromptLayout L =
-        layout::ComputePromptLayout(d->isGroup, d->expanded,
-                                    static_cast<int>(d->items.size()));
+    // fix thse isseue.md UI-01 / UI-05: a WM_SIZE / WM_EXITSIZEMOVE reflow passes
+    // a layout already stretched to the live client rect (layout::ReflowToClient);
+    // otherwise use the PREFERRED compact/expanded model. The window is only
+    // resized to the model when the popup has NOT been manually resized or
+    // maximized (the guard further below), so a reflow never fights the OS size.
+    // fix thse isseue.md v0.12.65 Bug 1: a WM_SIZE / WM_EXITSIZEMOVE reflow still
+    // passes its reflowed layout as the override; everything else now goes
+    // through the ONE effective-layout helper (preferred for a normal popup,
+    // reflowed once maximized/manually resized) so a Ctrl+E density toggle on an
+    // already-resized popup reflows the content into the user's size instead of
+    // snapping the children back to the preferred compact/expanded rects.
+    const layout::PromptLayout L = reflowOverride ? *reflowOverride :
+        ComputeEffectiveLayout(hwnd, d);
     // fix thse isseue.md ("Next exact fix order" #1-#4): the +/- resize is now
     // ONE atomic transaction, not a sequence of MoveWindow(..., TRUE) that each
     // repainted mid-flight (the wiggly/staggered redraw). Flow: suppress
@@ -5514,6 +6066,8 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d) {
     deferMove(d->destLabel,   L.destLabel);
     deferMove(d->destField,   inputfield::InnerEditRect(L.destField.x, L.destField.y, L.destField.w, L.destField.h));
     deferMove(d->destCopyBtn, L.destCopyBtn);
+    deferMove(d->infoBtn,     L.infoButton);        // UI-03: footer info/help button
+    deferMove(d->helpPanel,   L.selectedContent);   // UI-06: help panel overlays the list area
     deferMove(d->nameLabel,   L.nameLabel);
     deferMove(d->edit,        inputfield::InnerEditRect(L.nameField.x, L.nameField.y, L.nameField.w, L.nameField.h));
     deferMove(d->segCopyBtn,  L.segCopy);
@@ -5607,8 +6161,16 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d) {
            d->expanded ? L"expanded" : L"compact",
            np.x + static_cast<int>(outer.cx) / 2,
            np.y + static_cast<int>(outer.cy) / 2);
-    SetWindowPos(hwnd, nullptr, np.x, np.y, outer.cx, outer.cy,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    // fix thse isseue.md Phase 3: do NOT force the popup back to the fixed
+    // compact/expanded size once the user has MAXIMIZED or hand-resized it
+    // (that would snap it back / un-maximize it -- the old unconditional
+    // SetWindowPos). The child controls were already positioned by the
+    // deferMove() pass above regardless; only the top-level window RESIZE is
+    // skipped, so Ctrl+E density then just reflows the content in place.
+    if (!d->manualSized && !IsZoomed(hwnd)) {
+        SetWindowPos(hwnd, nullptr, np.x, np.y, outer.cx, outer.cy,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     // fix thse isseue.md #3/#4: re-enable painting and issue ONE final repaint
     // reaching the window AND every child (redraw::FinalRepaintFlags() ==
     // RDW_INVALIDATE|RDW_ERASE|RDW_UPDATENOW|RDW_ALLCHILDREN), so the resize
@@ -6212,6 +6774,223 @@ inline std::wstring IconKey(const std::wstring& name, bool isFolder) {
     return ext;
 }
 }  // namespace shellicon
+
+// ---- DPI-aware Shell icon SOURCE selection (fix thse isseue.md Phase 1) ----
+// Byte-for-byte mirror of tests/icon_source_logic.h. The Selected Items rows
+// draw each Shell icon from a system image-list TIER whose physical resolution
+// is >= the painter's draw size, so Large / Extra large icons are DOWNSAMPLED
+// from a crisp high-resolution source (SHIL_EXTRALARGE 48 / SHIL_JUMBO 256)
+// rather than UPSCALED from a 16px small icon. The extracted HICONs are cached
+// per (type, tier, dpi) so scrolling and zooming reuse one source. The real
+// SHGetFileInfoW(SHGFI_SYSICONINDEX) -> SHGetImageList(SHIL_*) ->
+// IImageList::GetIcon extraction + cache are below in the paint layer.
+namespace iconsrc {
+
+enum class Tier { Small = 1, ExtraLarge = 2, Jumbo = 4 };
+
+inline int Shil(Tier t) { return static_cast<int>(t); }
+
+inline int TierBasePx(Tier t) {
+    switch (t) {
+        case Tier::Small:      return 16;
+        case Tier::ExtraLarge: return 48;
+        case Tier::Jumbo:      return 256;
+    }
+    return 16;
+}
+
+inline int ScalePx(int basePx, unsigned dpi) {
+    return static_cast<int>((static_cast<unsigned>(basePx) * dpi + 48u) / 96u);
+}
+
+inline int TierPx(Tier t, unsigned dpi) {
+    if (t == Tier::Jumbo) return 256;
+    return ScalePx(TierBasePx(t), dpi);
+}
+
+inline int DrawPx(viewmode::Mode m, unsigned dpi) {
+    return ScalePx(viewmode::IconPx(m), dpi);
+}
+
+inline Tier TierForMode(viewmode::Mode m) {
+    switch (m) {
+        case viewmode::Mode::List:       return Tier::Small;
+        case viewmode::Mode::Large:      return Tier::ExtraLarge;
+        case viewmode::Mode::ExtraLarge: return Tier::Jumbo;
+    }
+    return Tier::Small;
+}
+
+inline Tier SelectTier(viewmode::Mode m, unsigned dpi) {
+    const int need = DrawPx(m, dpi);
+    if (TierPx(Tier::Small, dpi) >= need)      return Tier::Small;
+    if (TierPx(Tier::ExtraLarge, dpi) >= need) return Tier::ExtraLarge;
+    return Tier::Jumbo;
+}
+
+inline bool SourceCoversDraw(viewmode::Mode m, unsigned dpi) {
+    return TierPx(SelectTier(m, dpi), dpi) >= DrawPx(m, dpi);
+}
+
+inline std::wstring CacheKey(const std::wstring& typeKey, Tier t, unsigned dpi) {
+    return typeKey + L"|t" + std::to_wstring(static_cast<int>(t)) +
+           L"|d" + std::to_wstring(dpi);
+}
+
+}  // namespace iconsrc
+
+// ---- window maximize/restore + resize-frame model (fix thse isseue.md Phase 3) ----
+// Byte-for-byte mirror of tests/win_resize_logic.h. The Group popup's title-bar
+// square button is a real Maximize/Restore driven by the ACTUAL maximized state
+// (IsZoomed), the borderless popup grows a resize frame (WS_THICKFRAME +
+// WM_NCHITTEST), maximizing occupies the monitor WORK AREA, and Ctrl+E density
+// stays independent of maximize. The Ht values equal the Win32 HT* codes so the
+// WM_NCHITTEST handler returns them directly.
+namespace winresize {
+
+inline int MinClientW() { return 360; }
+inline int MinClientH() { return 320; }
+
+inline int ClampW(int w, int minW) { return w < minW ? minW : w; }
+inline int ClampH(int h, int minH) { return h < minH ? minH : h; }
+
+enum Ht {
+    Client = 1, Left = 10, Right = 11, Top = 12, TopLeft = 13,
+    TopRight = 14, Bottom = 15, BottomLeft = 16, BottomRight = 17
+};
+
+inline Ht HitTest(int x, int y, int clientW, int clientH, int borderPx) {
+    const bool l = x >= 0 && x < borderPx;
+    const bool r = x < clientW && x >= clientW - borderPx;
+    const bool t = y >= 0 && y < borderPx;
+    const bool b = y < clientH && y >= clientH - borderPx;
+    if (t && l) return TopLeft;
+    if (t && r) return TopRight;
+    if (b && l) return BottomLeft;
+    if (b && r) return BottomRight;
+    if (l) return Left;
+    if (r) return Right;
+    if (t) return Top;
+    if (b) return Bottom;
+    return Client;
+}
+
+inline bool ShowRestoreGlyph(bool isZoomed) { return isZoomed; }
+
+struct Rect { int left, top, right, bottom; };
+inline int Width(const Rect& r)  { return r.right - r.left; }
+inline int Height(const Rect& r) { return r.bottom - r.top; }
+inline bool Valid(const Rect& r) { return r.right > r.left && r.bottom > r.top; }
+
+inline Rect MaximizeTo(const Rect& workArea) { return workArea; }
+
+inline Rect RestoreTo(const Rect& prev, const Rect& fallback) {
+    return Valid(prev) ? prev : fallback;
+}
+
+// WM_GETMINMAXINFO geometry (byte-for-byte mirror of tests/win_resize_logic.h).
+// A borderless WS_POPUP maximized with the DEFAULT MINMAXINFO covers the ENTIRE
+// monitor (over the taskbar) and can be drag-sized into an unusable sliver.
+// ComputeMinMax derives the fields the live WM_GETMINMAXINFO handler writes into
+// MINMAXINFO so maximize fills the monitor WORK AREA (taskbar respected, never
+// exclusive full screen) and a resize can never shrink below the minimum.
+// ptMaxPosition is RELATIVE to the monitor origin (so a secondary monitor at
+// negative virtual coords maximizes correctly). minTrack{W,H} are the minimum
+// OUTER (device-px) window dimensions supplied by the caller.
+struct SizeI  { int cx; int cy; };
+struct MinMax { SizeI maxPos; SizeI maxSize; SizeI minTrack; };
+
+inline MinMax ComputeMinMax(const Rect& monitor, const Rect& work,
+                            int minTrackW, int minTrackH) {
+    MinMax m;
+    m.maxPos.cx   = work.left - monitor.left;   // -> MINMAXINFO.ptMaxPosition.x
+    m.maxPos.cy   = work.top  - monitor.top;    // -> MINMAXINFO.ptMaxPosition.y
+    m.maxSize.cx  = Width(work);                 // -> MINMAXINFO.ptMaxSize.x
+    m.maxSize.cy  = Height(work);                // -> MINMAXINFO.ptMaxSize.y
+    m.minTrack.cx = minTrackW;                   // -> MINMAXINFO.ptMinTrackSize.x
+    m.minTrack.cy = minTrackH;                   // -> MINMAXINFO.ptMinTrackSize.y
+    return m;
+}
+
+inline bool DensityMayResizeWindow(bool isZoomed) { return !isZoomed; }
+
+}  // namespace winresize
+
+// fix thse isseue.md v0.12.65 Bug 1: ONE authoritative "effective layout" for the
+// Group popup. For a normal (not resized) popup it returns the PREFERRED compact/
+// expanded layout; once the user has maximized or drag-resized it (manualSized
+// latched, or IsZoomed) it returns the live REFLOWED layout -- byte-for-byte the
+// SAME layout::ReflowToClient transform (and the same MulDiv device->design
+// scaling) the WM_SIZE handler feeds into ApplyPromptLayout. The card paint
+// (WM_ERASEBKGND), the title-bar hit-test (WM_NCHITTEST) and the child-move
+// (ApplyPromptLayout) all read from THIS single result, so the painted card
+// boundaries can never drift out of sync with the controls inside them. New
+// Folder is never a Group popup and is never manualSized/zoomed, so it always
+// gets its original untouched geometry; initial preferred sizing is unchanged.
+static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptData* d) {
+    layout::PromptLayout base = layout::ComputePromptLayout(
+        d->isGroup, d->expanded, static_cast<int>(d->items.size()));
+    if (!d->isGroup) return base;
+    if (!(d->manualSized || IsZoomed(hwnd))) return base;
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const int cw = rc.right - rc.left;
+    const int ch = rc.bottom - rc.top;
+    if (cw <= 0 || ch <= 0) return base;
+    const int ddpi = static_cast<int>(d->dpi ? d->dpi : 96);
+    return layout::ReflowToClient(base,
+        MulDiv(cw, 96, ddpi), MulDiv(ch, 96, ddpi),
+        winresize::MinClientW(), winresize::MinClientH());
+}
+
+// Win32 EXTRACTION + per-popup cache for the Phase 1 DPI-aware Shell icon
+// source. Returns a crisp HICON from the requested system image-list tier
+// (SHIL_EXTRALARGE / SHIL_JUMBO), extracted once and cached on the popup; the
+// caller DOWNSAMPLES it to the draw size and must NOT free it (the popup's
+// NamePromptData destructor owns teardown). Returns nullptr when no high-res
+// source is available, so the caller draws a crisp vector glyph instead of
+// upscaling. SHGetImageList is resolved from shell32 at runtime (no new import
+// library), and uncached extraction is a pure type lookup
+// (SHGFI_SYSICONINDEX | SHGFI_USEFILEATTRIBUTES -- no disk hit).
+static HICON GetCachedShellIcon(NamePromptData* d, const std::wstring& name,
+                                bool isFolder, iconsrc::Tier tier) {
+    if (!d) return nullptr;
+    const std::wstring key =
+        iconsrc::CacheKey(shellicon::IconKey(name, isFolder), tier, d->dpi);
+    for (auto& kv : d->iconCache)
+        if (kv.first == key) return kv.second;   // reused, never re-extracted
+
+    typedef HRESULT(WINAPI * PFN_SHGetImageList)(int, REFIID, void**);
+    static PFN_SHGetImageList pSHGetImageList = []() -> PFN_SHGetImageList {
+        HMODULE h = GetModuleHandleW(L"shell32.dll");
+        if (!h) h = LoadLibraryW(L"shell32.dll");
+        return h ? reinterpret_cast<PFN_SHGetImageList>(
+                       GetProcAddress(h, "SHGetImageList"))
+                 : nullptr;
+    }();
+
+    HICON hIcon = nullptr;
+    SHFILEINFOW sfi = {};
+    // SYSICONINDEX yields the system image-list index for this file TYPE; the
+    // same index resolves across every SHIL_* tier (the lists are parallel).
+    if (SHGetFileInfoW(name.c_str(), shellicon::AttrFor(isFolder), &sfi,
+                       sizeof(sfi),
+                       SHGFI_SYSICONINDEX | SHGFI_USEFILEATTRIBUTES)) {
+        IImageList* iml = nullptr;
+        if (pSHGetImageList &&
+            SUCCEEDED(pSHGetImageList(iconsrc::Shil(tier), __uuidof(IImageList),
+                                      reinterpret_cast<void**>(&iml))) &&
+            iml) {
+            // ILD_TRANSPARENT: a crisp alpha icon from the chosen tier.
+            iml->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &hIcon);
+            iml->Release();
+        }
+    }
+    // Only a real handle is cached; a transient failure may retry next paint
+    // (and the caller falls back to the crisp vector glyph meanwhile).
+    if (hIcon) d->iconCache.push_back(std::make_pair(key, hIcon));
+    return hIcon;
+}
 
 // ---- production vector icon layer (fix thse isseue.md #2-#8) ----
 // One DPI-aware GDI renderer keeps every popup icon crisp and independent of
@@ -6955,7 +7734,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // models; scrolling just repaints the new slice, so this is a
                 // real structured list instead of one multi-line text blob.
                 groupInfo = CreateWindowExW(0, L"STATIC", L"",
-                                WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
+                                WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | SS_OWNERDRAW,
                                 S(L.selectedContent.x), S(L.selectedContent.y), S(L.selectedContent.w), S(L.selectedContent.h),
                                 hwnd, reinterpret_cast<HMENU>(static_cast<LONG_PTR>(110)), hinst, nullptr);
                 SendMessageW(groupInfo, WM_SETFONT,
@@ -7084,6 +7863,31 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 hwnd, reinterpret_cast<HMENU>(111), hinst, nullptr);
                 SendMessageW(d->destCopyBtn, WM_SETFONT,
                              reinterpret_cast<WPARAM>(font), TRUE);
+
+                // fix thse isseue.md UI-03 / UI-06: a REAL footer INFO/help button
+                // (id 121), painted by the SAME themed BS_OWNERDRAW renderer as
+                // Copy/Cancel, plus a dedicated SS_OWNERDRAW help PANEL (id 122)
+                // that overlays the Selected Items area when the button is
+                // clicked. The panel starts HIDDEN; WM_COMMAND id 121 toggles it
+                // through the tested infohelp open/close model, so the help is a
+                // working UI feature -- not merely the infohelp helper functions.
+                d->infoBtn = CreateWindowExW(0, L"BUTTON", L"?",
+                                WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+                                S(L.infoButton.x), S(L.infoButton.y),
+                                S(L.infoButton.w), S(L.infoButton.h),
+                                hwnd, reinterpret_cast<HMENU>(121), hinst, nullptr);
+                SendMessageW(d->infoBtn, WM_SETFONT,
+                             reinterpret_cast<WPARAM>(font), TRUE);
+                // fix thse isseue.md v0.12.65 Bug 2: WS_CLIPSIBLINGS so the OS
+                // honours this panel's Z order against the overlapping Selected
+                // Items list (id 110). Without it the list repainted straight
+                // over the just-shown panel -- the "? flashes then disappears".
+                // It is brought to the top of the sibling order on each click.
+                d->helpPanel = CreateWindowExW(0, L"STATIC", L"",
+                                WS_CHILD | WS_CLIPSIBLINGS | SS_OWNERDRAW,
+                                S(L.selectedContent.x), S(L.selectedContent.y),
+                                S(L.selectedContent.w), S(L.selectedContent.h),
+                                hwnd, reinterpret_cast<HMENU>(122), hinst, nullptr);
 
                 // fix thse isseue.md #1: the Status card (state icon + label +
                 // progress track) was removed; the Group popup no longer has a
@@ -7312,9 +8116,12 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 ScreenToClient(hwnd, &pt);
                 const UINT hdpi = d->dpi;
                 auto HS = [hdpi](int v) { return ScaleDpi(v, hdpi); };
-                const layout::PromptLayout L =
-                    layout::ComputePromptLayout(true, d->expanded,
-                                                static_cast<int>(d->items.size()));
+                // fix thse isseue.md v0.12.65 Bug 1: hit-test the title-bar
+                // controls from the SAME effective layout the paint + child-move
+                // use, so after a maximize/resize the caption buttons are
+                // hit-tested where they were actually moved to (reflowed), not
+                // at their preferred positions.
+                const layout::PromptLayout L = ComputeEffectiveLayout(hwnd, d);
                 auto toBox = [&](const layout::Rect& r) {
                     return titlebar::Box{HS(r.x), HS(r.y), HS(r.w), HS(r.h)};
                 };
@@ -7430,9 +8237,15 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // / Status. New Folder has no cards (isGroup == false).
             if (d && d->isGroup) {
                 const UINT cdpi = d->dpi;
-                const layout::PromptLayout L =
-                    layout::ComputePromptLayout(true, d->expanded,
-                                                static_cast<int>(d->items.size()));
+                // fix thse isseue.md v0.12.65 Bug 1: paint every card from the
+                // SAME effective layout the children were moved to. Before this,
+                // the cards were painted from the PREFERRED compact/expanded
+                // layout while the controls had been reflowed to the live client
+                // rect, so a maximized/resized popup showed card borders at the
+                // old width with content spilling past them (the horizontal bars
+                // outside the cards). The effective layout is the reflowed one
+                // once manualSized/zoomed, so borders now track their children.
+                const layout::PromptLayout L = ComputeEffectiveLayout(hwnd, d);
                 const ThemePalette cpal = ResolveThemePalette(IsDarkMode());
                 // fix thse isseue.md #2: custom title bar (WS_POPUP, no native
                 // caption). A hairline separator under the band + the folder
@@ -7864,6 +8677,43 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // the SAME tested listscroll:: + mode:: model, so wheel/keys page
             // through a large selection; sel:: formats each cell. HONEST: only
             // the rows currently in the viewport are drawn.
+            if (dis->CtlType == ODT_STATIC && dis->CtlID == 122 && d) {
+                // fix thse isseue.md UI-03 / UI-06: the themed help PANEL. Painted
+                // only while shown/pinned (the WM_COMMAND id-121 toggle calls
+                // ShowWindow). Renders the summarized infohelp lines over the
+                // card surface using the SAME palette + fonts as the rest of the
+                // popup, so help reads clearly in both light and dark themes.
+                HDC hdc = dis->hDC;
+                RECT rc = dis->rcItem;
+                const UINT dpi = d->dpi;
+                auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+                const ThemePalette pal = ResolveThemePalette(IsDarkMode());
+                HBRUSH cardBrush = CreateSolidBrush(pal.cardBg);
+                FillRect(hdc, &rc, cardBrush);
+                DeleteObject(cardBrush);
+                HBRUSH frame = CreateSolidBrush(pal.cancelBorder);
+                FrameRect(hdc, &rc, frame);
+                DeleteObject(frame);
+                SetBkMode(hdc, TRANSPARENT);
+                const int padX = S(14);
+                int ty = rc.top + S(12);
+                SetTextColor(hdc, pal.panelText);
+                HGDIOBJ ofTitle = SelectObject(hdc, UiFontSemibold(dpi));
+                RECT trc = {rc.left + padX, ty, rc.right - padX, ty + S(20)};
+                DrawTextW(hdc, infohelp::AccessibleName(), -1, &trc,
+                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                SelectObject(hdc, ofTitle);
+                ty += S(26);
+                HGDIOBJ ofBody = SelectObject(hdc, UiFont(dpi));
+                for (int i = 0; i < infohelp::LineCount(); ++i) {
+                    RECT lrc = {rc.left + padX, ty, rc.right - padX, ty + S(20)};
+                    DrawTextW(hdc, infohelp::Line(i), -1, &lrc,
+                              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                    ty += S(22);
+                }
+                SelectObject(hdc, ofBody);
+                return TRUE;
+            }
             if (dis->CtlType == ODT_STATIC && dis->CtlID == 110 && d) {
                 RECT rc = dis->rcItem;
                 // fix thse isseue.md #2: DOUBLE-BUFFER the whole list paint into
@@ -8203,16 +9053,45 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // clipped and the scrollbar is enabled whenever fewer rows
                 // physically fit than the cap. Cache it so the modal-loop
                 // wheel/key handlers page by the SAME capacity.
+                // UI-02 / UI-04 (fix thse isseue.md): the Selected-items scroll
+                // capacity pages by the SAME height the painter draws -- rowH for
+                // the List rows, but the taller shared viewmode::CellH for the
+                // Large / Extra large GRID cells (icon + padding + the fixed
+                // label band). Feeding rowH for a grid would overcount how many
+                // cells fit and clip the last visible row; CellH keeps layout,
+                // paint and scroll in one geometry model.
+                const int capRowH = viewmode::IsGrid(vmode)
+                    ? S(viewmode::CellH(vmode))
+                    : rowH;
                 const int visRows = listscroll::EffectiveVisibleRows(
-                    mode::VisibleRows(lm), rc.bottom - rowsTop, rowH);
+                    mode::VisibleRows(lm), rc.bottom - rowsTop, capRowH);
                 d->listVisibleRows = visRows;
+                // fix thse isseue.md Phase 2: Large / Extra large are REAL
+                // responsive icon grids, not one tall row per item. Feed the
+                // shared listscroll:: model GRID ROWS (not the item count) so a
+                // scroll "row" IS a grid row: the visible range, overflow test,
+                // thumb and wheel/key paging all operate per grid row. selCols
+                // comes from the live viewport width (the scrollbar gutter is
+                // reserved up front so the column count stays stable) and is
+                // cached on the popup so the modal-loop scroll handlers page by
+                // whole grid rows too. List mode is unchanged (selCols == 1).
+                const bool gridMode = viewmode::IsGrid(vmode);
+                const int gridGutter =
+                    S(listscroll::kScrollbarW) + S(listscroll::kMetaScrollGap);
+                const int selCols = gridMode
+                    ? viewmode::Columns(vmode, (right - left) - gridGutter)
+                    : 1;
+                d->selGridCols = selCols;
+                const int scrollRows = gridMode
+                    ? viewmode::GridRows(itemCount, selCols)
+                    : itemCount;
                 const listscroll::Range vr = listscroll::VisibleRange(
-                    d->listTopRow, itemCount, visRows);
+                    d->listTopRow, scrollRows, visRows);
                 // fix thse isseu e.md #4: reserve a right-edge gutter for a
                 // VISIBLE scrollbar when the list overflows, so rows never draw
                 // under the thumb. The scroll math stays the source of truth.
                 const bool needsBar =
-                    listscroll::NeedsScrollbar(itemCount, visRows);
+                    listscroll::NeedsScrollbar(scrollRows, visRows);
                 const int barW = S(listscroll::kScrollbarW);
                 // fix thse isseue.md Phase B: reserve the gutter PLUS ~8px of
                 // breathing room so the rightmost size metadata never butts
@@ -8237,7 +9116,9 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     rowRight - left,
                     extW, sizeW, S(listcol::kColGap),
                     S(listcol::kMinNameW));
-                for (int r = 0; r < vr.count && y + rowH <= rc.bottom; ++r) {
+                // List mode draws one item per row here; grid modes skip this
+                // loop and run the responsive cell grid below (Phase 2).
+                for (int r = 0; !gridMode && r < vr.count && y + rowH <= rc.bottom; ++r) {
                     const sel::Item& it =
                         d->items[static_cast<size_t>(vr.first + r)];
                     // fix thse isseue.md #2: apply the ACTIVE chip filter's
@@ -8277,22 +9158,57 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                         : S(icons::kRowIconW);
                     const int iconGap = S(icons::kRowIconGap);
                     RECT icr = {left, y + S(2), left + iconW, y + rowH - S(2)};
-                    SHFILEINFOW rsfi = {};
                     const int shPx = viewmode::IsGrid(vmode)
                         ? S(viewmode::IconPx(vmode))
                         : shellicon::IconPx(d->dpi);
-                    if (SHGetFileInfoW(it.name.c_str(),
-                                       shellicon::AttrFor(it.isFolder),
-                                       &rsfi, sizeof(rsfi),
-                                       shellicon::IconFlags()) && rsfi.hIcon) {
+                    // fix thse isseue.md Phase 1: in the GRID modes the icon is
+                    // drawn far larger than a 16px small icon, so source it from
+                    // the system image-list TIER whose resolution covers shPx
+                    // (SHIL_EXTRALARGE 48 / SHIL_JUMBO 256) and DOWNSAMPLE it --
+                    // never upscale a small bitmap. The extracted HICON is cached
+                    // per (type,tier,dpi) on the popup (GetCachedShellIcon), so
+                    // scrolling and zooming reuse ONE source and teardown frees them.
+                    HICON shIcon = viewmode::IsGrid(vmode)
+                        ? GetCachedShellIcon(d, it.name, it.isFolder,
+                                             iconsrc::SelectTier(vmode, d->dpi))
+                        : nullptr;
+                    if (shIcon) {
                         const int iw = icr.right - icr.left;
                         const int ih = icr.bottom - icr.top;
                         const int ix = icr.left + (iw - shPx) / 2;
                         const int iy = icr.top  + (ih - shPx) / 2;
-                        DrawIconEx(hdc, ix, iy, rsfi.hIcon, shPx, shPx, 0,
+                        // cached high-resolution source -> crisp downsample.
+                        DrawIconEx(hdc, ix, iy, shIcon, shPx, shPx, 0,
                                    nullptr, DI_NORMAL);
-                        DestroyIcon(rsfi.hIcon);
+                        // NOT destroyed here: owned by d->iconCache until the
+                        // popup is torn down (no per-paint create/destroy).
+                    } else if (!viewmode::IsGrid(vmode)) {
+                        // List mode: the DPI-appropriate SMALL Shell icon, whose
+                        // source size equals the draw size -- already crisp. The
+                        // handle is owned here, so DestroyIcon right after blit.
+                        SHFILEINFOW rsfi = {};
+                        if (SHGetFileInfoW(it.name.c_str(),
+                                           shellicon::AttrFor(it.isFolder),
+                                           &rsfi, sizeof(rsfi),
+                                           shellicon::IconFlags()) && rsfi.hIcon) {
+                            const int iw = icr.right - icr.left;
+                            const int ih = icr.bottom - icr.top;
+                            const int ix = icr.left + (iw - shPx) / 2;
+                            const int iy = icr.top  + (ih - shPx) / 2;
+                            DrawIconEx(hdc, ix, iy, rsfi.hIcon, shPx, shPx, 0,
+                                       nullptr, DI_NORMAL);
+                            DestroyIcon(rsfi.hIcon);
+                        } else {
+                            icons::DrawIcon(hdc,
+                                            it.isFolder ? icons::IconId::Folder
+                                                        : icons::IconId::File,
+                                            icr, secondary);
+                        }
                     } else {
+                        // Grid mode with no high-res source available (e.g. no
+                        // SHGetImageList): draw the crisp VECTOR glyph instead of
+                        // upscaling a 16px bitmap to 48/96px (fix thse isseue.md
+                        // Phase 1A -- never silently upscale).
                         icons::DrawIcon(hdc,
                                         it.isFolder ? icons::IconId::Folder
                                                     : icons::IconId::File,
@@ -8338,6 +9254,73 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     y += rowH;
                 }
 
+                // fix thse isseue.md Phase 2: the real responsive icon GRID for
+                // Large / Extra large. The single-column loop above is skipped
+                // in grid mode; here each VISIBLE grid row (vr is in grid-row
+                // units) is expanded into selCols cells laid left-to-right. Each
+                // cell centers the crisp high-resolution Shell icon (the Phase 1
+                // cache) over a centered, wrapped + ellipsized filename, with
+                // consistent cell padding so icons and labels never clip or
+                // collide. The active chip filter subdues non-matching cells
+                // WITHOUT reordering or changing the real Explorer selection.
+                if (gridMode) {
+                    const int cellW   = S(viewmode::CellW(vmode));
+                    const int cellH   = S(viewmode::CellH(vmode));  // UI-02: shared model = icon + padding + label band (NOT rowH, which clipped the filename beneath the icon)
+                    const int gIconPx = S(viewmode::IconPx(vmode));
+                    for (int gr = 0;
+                         gr < vr.count &&
+                         (rowsTop + (gr + 1) * cellH) <= rc.bottom;
+                         ++gr) {
+                        const int gridRow = vr.first + gr;
+                        const int cellTop = rowsTop + gr * cellH;
+                        for (int c = 0; c < selCols; ++c) {
+                            const int itemIdx = gridRow * selCols + c;
+                            if (itemIdx >= itemCount) break;
+                            const sel::Item& git =
+                                d->items[static_cast<size_t>(itemIdx)];
+                            const int cellLeft = left + c * cellW;
+                            // active chip filter -> subdue (never reorders)
+                            const std::wstring gExtKey = git.isFolder
+                                ? std::wstring()
+                                : chipmodel::NormExtKey(sel::ExtLabel(git.name, false));
+                            const bool gSub =
+                                chipfilter::RowFor(chipState, gExtKey, git.isFolder)
+                                    == chipfilter::Row::Subdued;
+                            const COLORREF gName = gSub
+                                ? RGB(hovertint::BlendChannel(GetRValue(pal.panelText), GetRValue(pal.cardBg), 55),
+                                      hovertint::BlendChannel(GetGValue(pal.panelText), GetGValue(pal.cardBg), 55),
+                                      hovertint::BlendChannel(GetBValue(pal.panelText), GetBValue(pal.cardBg), 55))
+                                : pal.panelText;
+                            // crisp high-res icon centered in the cell's top band
+                            const int ix = cellLeft + (cellW - gIconPx) / 2;
+                            const int iy = cellTop + S(4);
+                            RECT gicr = {ix, iy, ix + gIconPx, iy + gIconPx};
+                            HICON gIcon = GetCachedShellIcon(
+                                d, git.name, git.isFolder,
+                                iconsrc::SelectTier(vmode, d->dpi));
+                            if (gIcon) {
+                                DrawIconEx(hdc, ix, iy, gIcon, gIconPx, gIconPx,
+                                           0, nullptr, DI_NORMAL);
+                            } else {
+                                icons::DrawIcon(hdc,
+                                                git.isFolder ? icons::IconId::Folder
+                                                             : icons::IconId::File,
+                                                gicr, secondary);
+                            }
+                            // centered, wrapped + ellipsized filename below
+                            std::wstring gnm = sel::RowDisplayName(
+                                git.name, git.isFolder,
+                                showext::RowShowsExtInline(d->showExt, git.isFolder));
+                            RECT glr = {cellLeft + S(2), iy + gIconPx + S(2),
+                                        cellLeft + cellW - S(2), cellTop + cellH};
+                            SetTextColor(hdc, gName);
+                            DrawTextW(hdc, gnm.c_str(), -1, &glr,
+                                      DT_CENTER | DT_WORDBREAK | DT_END_ELLIPSIS |
+                                      DT_EDITCONTROL | DT_NOPREFIX);
+                        }
+                    }
+                }
+
                 // fix thse isseu e.md #4: a VISIBLE scrollbar (track + thumb)
                 // in the reserved right-edge gutter, shown only when the list
                 // overflows. Position/size come from the tested listscroll::
@@ -8365,7 +9348,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     DeleteObject(trk);
                     // Thumb.
                     const listscroll::Thumb th = listscroll::ThumbRect(
-                        d->listTopRow, itemCount, visRows, trackH, S(16));
+                        d->listTopRow, scrollRows, visRows, trackH, S(16));
                     const int pad = S(listscroll::kScrollbarPad);
                     const int rad = S(3) * 2;
                     const RECT thumbRc = {track.left + pad, track.top + th.y,
@@ -8401,10 +9384,10 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // ADD-ON (Phase D): the timed Auto Group button (id 120). It reuses
             // the EXACT secondary-button surface (same palette tokens, same
             // rounded AA fill + 1px border) as Cancel so it never introduces a
-            // new visual style. fix thse isseue.md #5: while the five-second
+            // new visual style. fix thse isseue.md #5: while the eight-second
             // delay is Waiting the button keeps that normal muted surface (NO
             // black lock rectangle) and shows a stable, SEMIBOLD, centered M:SS
-            // countdown (agcd::CountdownText -> 0:05..0:01, no milliseconds).
+            // countdown (agcd::CountdownText -> 0:08..0:01, no milliseconds).
             // Once Enabled it shows the plain "Auto Group" caption. The state is
             // read fresh from the monotonic clock so it matches WM_TIMER exactly.
             if (dis->CtlType == ODT_BUTTON && dis->CtlID == 120 && d) {
@@ -8469,7 +9452,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     // fix thse isseue.md #5: during the safety delay the button
                     // keeps its NORMAL muted secondary surface (already filled
                     // above) -- NO black lock rectangle -- and shows a STABLE,
-                    // SEMIBOLD, centered M:SS countdown (0:05..0:01) with NO
+                    // SEMIBOLD, centered M:SS countdown (0:08..0:01) with NO
                     // milliseconds. The text is the whole-second value, so it
                     // changes at most once per second (no flashing suffix).
                     const int secs = agcd::RemainingSeconds(
@@ -8497,7 +9480,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (dis->CtlType == ODT_BUTTON &&
                 (dis->CtlID == IDOK || dis->CtlID == IDCANCEL ||
                  dis->CtlID == 107 || dis->CtlID == 108 ||
-                 dis->CtlID == 111)) {
+                 dis->CtlID == 111 || dis->CtlID == 121)) {
                 bool pressed = (dis->itemState & ODS_SELECTED) != 0;
                 bool isCreate = (dis->CtlID == IDOK);
                 // Copy | Move segments (Phase 6/D, ids 107/108). The ACTIVE
@@ -8822,18 +9805,20 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 }
                 return 0;
             }
-            // Compact/Expanded titlebar toggle (id 103, Group only; #11/#15):
-            // same action as Ctrl+E -- flip the mode, remember it for the
-            // session, refresh the glyph, and relayout through the one path.
+            // fix thse isseue.md Phase 3: the title-bar square button (id 103)
+            // is now a REAL Maximize/Restore, driven by the ACTUAL window state
+            // (IsZoomed), NOT the compact/expanded content preference. Ctrl+E
+            // still owns the density preference independently (see the modal
+            // loop). Maximizing fills the monitor WORK AREA via WM_GETMINMAXINFO;
+            // SW_RESTORE returns to the user's prior bounds (Windows tracks them).
+            // manualSized latches so the layout stops forcing the preset size.
             if (id == 103 && d && d->isGroup) {
-                d->expanded = !d->expanded;
-                g_sessionHasMode = true;
-                g_sessionExpanded = d->expanded;
-                // fix thse isseue.md ("Also remove this unnecessary repaint"):
-                // no pre-relayout InvalidateRect of the size toggle. The one
-                // atomic ApplyPromptLayout redraw (RDW_ALLCHILDREN) repaints the
-                // toggle glyph with the rest in a single final frame.
-                ApplyPromptLayout(hwnd, d);
+                d->manualSized = true;
+                // The maximize/restore glyph repaints through the normal
+                // WM_SIZE relayout path (RedrawWindow reaches every child), so
+                // the previous dedicated pre-relayout caption-button repaint is
+                // redundant and has been removed to kill the extra flash.
+                ShowWindow(hwnd, IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
                 SetFocus(d->edit);
                 return 0;
             }
@@ -8856,6 +9841,26 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     GroupDestinationFieldText(d->destPath, d->effectiveDest, d->lastTarget));
                 return 0;
             }
+            // fix thse isseue.md UI-03 / UI-06: the footer INFO/help button
+            // (id 121) toggles the themed help panel through the TESTED infohelp
+            // click-to-pin model (OnClick: Hidden/Shown -> Pinned, Pinned ->
+            // Hidden), so a second click explicitly dismisses it. Hover-less
+            // users get a persistent popup; it never steals focus from the
+            // folder-name edit (SW_SHOWNOACTIVATE), and it is kept above the list.
+            if (id == 121 && d && d->isGroup) {
+                d->helpVis = static_cast<int>(
+                    infohelp::OnClick(static_cast<infohelp::Vis>(d->helpVis)));
+                const bool show =
+                    d->helpVis != static_cast<int>(infohelp::Vis::Hidden);
+                if (d->helpPanel) {
+                    ShowWindow(d->helpPanel, show ? SW_SHOWNOACTIVATE : SW_HIDE);
+                    if (show) {
+                        BringWindowToTop(d->helpPanel);
+                        InvalidateRect(d->helpPanel, nullptr, TRUE);
+                    }
+                }
+                return 0;
+            }
             // Copy | Move segments (Phase 6/D, Group only): clicking id 107
             // selects Copy, id 108 selects Move. segmented::OnClickSegment (unit
             // tested) maps the clicked segment -> Seg -> d->isMove, the SAME
@@ -8872,7 +9877,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             // ADD-ON (Phase D): the timed Auto Group button (id 120). It only
-            // ACTS when the five-second countdown has elapsed (agcd::Clickable).
+            // ACTS when the eight-second countdown has elapsed (agcd::Clickable).
             // On a valid click it previews the plan (destination + counts) from
             // the pure autogroup:: model, shows a concise confirmation, and --
             // on OK -- closes the popup marking the result as an Auto Group
@@ -9005,6 +10010,97 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 }
                 DestroyWindow(hwnd);
                 return 0;
+            }
+            break;
+        }
+        case WM_GETMINMAXINFO: {
+            // fix thse isseue.md P0 (window geometry): the Group popup is a
+            // borderless WS_POPUP, so a DEFAULT maximize covers the WHOLE
+            // monitor -- OVER the taskbar -- and a drag-resize could crush the
+            // controls. Clamp the maximized rect to the monitor WORK AREA and
+            // set the minimum track size from the tested winresize::ComputeMinMax
+            // model so the popup never maximizes to exclusive full screen and
+            // never shrinks into an unusable sliver. New Folder (native caption)
+            // keeps the OS default handling (falls through to DefWindowProcW).
+            if (d && d->isGroup) {
+                MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
+                MONITORINFO mi;
+                mi.cbSize = sizeof(mi);
+                HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                if (mmi && mon && GetMonitorInfo(mon, &mi)) {
+                    const winresize::Rect monR{
+                        static_cast<int>(mi.rcMonitor.left),
+                        static_cast<int>(mi.rcMonitor.top),
+                        static_cast<int>(mi.rcMonitor.right),
+                        static_cast<int>(mi.rcMonitor.bottom)};
+                    const winresize::Rect workR{
+                        static_cast<int>(mi.rcWork.left),
+                        static_cast<int>(mi.rcWork.top),
+                        static_cast<int>(mi.rcWork.right),
+                        static_cast<int>(mi.rcWork.bottom)};
+                    // Minimum CLIENT (96-dpi design px) -> minimum OUTER device
+                    // px via the SAME outer-size model + window styles the create
+                    // site used, so the floor matches real geometry at this DPI.
+                    const SIZE minOuter = PromptOuterSize(
+                        winresize::MinClientW(), winresize::MinClientH(),
+                        static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE)),
+                        static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)),
+                        d->dpi);
+                    const winresize::MinMax mm = winresize::ComputeMinMax(
+                        monR, workR, static_cast<int>(minOuter.cx),
+                        static_cast<int>(minOuter.cy));
+                    mmi->ptMaxPosition.x  = mm.maxPos.cx;
+                    mmi->ptMaxPosition.y  = mm.maxPos.cy;
+                    mmi->ptMaxSize.x      = mm.maxSize.cx;
+                    mmi->ptMaxSize.y      = mm.maxSize.cy;
+                    mmi->ptMinTrackSize.x = mm.minTrack.cx;
+                    mmi->ptMinTrackSize.y = mm.minTrack.cy;
+                    return 0;
+                }
+            }
+            break;
+        }
+        case WM_SIZE: {
+            // fix thse isseue.md UI-01 / UI-05: the Group popup has a real resize
+            // frame (WS_THICKFRAME + WM_NCHITTEST) and a Maximize button (id 103).
+            // Once it is maximized or has been manually resized, reflow the
+            // children into the LIVE client rect so the form tracks the window
+            // and the footer stays visible -- instead of being stranded at the
+            // fixed compact/expanded size in the upper-left corner. The normal
+            // (not-yet-resized) popup falls through to DefWindowProc so initial
+            // sizing and the Ctrl+E density path are unchanged. New Folder is
+            // never a Group popup, so it is never reflowed here.
+            if (d && d->isGroup && wParam != SIZE_MINIMIZED &&
+                (d->manualSized || IsZoomed(hwnd))) {
+                RECT rc{};
+                GetClientRect(hwnd, &rc);
+                const int cw = rc.right - rc.left;
+                const int ch = rc.bottom - rc.top;
+                if (cw > 0 && ch > 0) {
+                    const int ddpi = static_cast<int>(d->dpi ? d->dpi : 96);
+                    // client (device) px -> 96-dpi DESIGN px (inverse of ScaleDpi)
+                    // for the pure, DPI-free reflow transform.
+                    layout::PromptLayout base = layout::ComputePromptLayout(
+                        d->isGroup, d->expanded,
+                        static_cast<int>(d->items.size()));
+                    layout::PromptLayout reflowed = layout::ReflowToClient(
+                        base, MulDiv(cw, 96, ddpi), MulDiv(ch, 96, ddpi),
+                        winresize::MinClientW(), winresize::MinClientH());
+                    ApplyPromptLayout(hwnd, d, &reflowed);
+                }
+                return 0;
+            }
+            break;
+        }
+        case WM_EXITSIZEMOVE: {
+            // fix thse isseue.md UI-05: the user finished dragging the resize
+            // frame. Latch manualSized so (a) this and future size changes take
+            // the reflow path above and (b) the Ctrl+E density toggle no longer
+            // snaps the window back to the preferred size (it preserves the
+            // user's chosen dimensions). Then reflow once into the final rect.
+            if (d && d->isGroup) {
+                d->manualSized = true;
+                SendMessageW(hwnd, WM_SIZE, SIZE_RESTORED, 0);
             }
             break;
         }
@@ -9200,8 +10296,16 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
     // fix thse isseue.md #2: the Group popup is a borderless WS_POPUP so it can
     // paint its OWN title bar (title + Expand/Minimize/Close); New Folder keeps
     // the native caption. The style MUST match the CreateWindowExW call below.
+    // fix thse isseue.md P0 (manual resize): the Group popup adds WS_THICKFRAME
+    // (+ WS_MAXIMIZEBOX) so the OS gives it a real sizing frame -- the user can
+    // drag any edge/corner to resize and the WM_SIZE handler reflows the content
+    // (layout::ReflowToClient) into the live client rect. Without this bit
+    // DefWindowProc ignores the frame hit-tests and the popup is stuck at its
+    // fixed size. The frame is accounted for by PromptOuterSize (which uses THIS
+    // same style), so the client stays the intended size (no clipping), and
+    // maximize is clamped to the work area by the WM_GETMINMAXINFO handler.
     const DWORD winStyle = data.isGroup
-        ? WS_POPUP
+        ? (WS_POPUP | WS_THICKFRAME | WS_MAXIMIZEBOX)
         : (WS_POPUP | WS_CAPTION | WS_SYSMENU);
     // fix thse isseue.md P0 #2: ONE shared extended style for BOTH the
     // outer-size math AND CreateWindowExW, via the unit-tested outeroutline::
@@ -9420,6 +10524,15 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 : mode::VisibleRows(
                       data.expanded ? mode::Mode::Expanded : mode::Mode::Compact);
             const int itemCount = static_cast<int>(data.items.size());
+            // fix thse isseue.md Phase 2: in a grid view (Large / Extra large)
+            // one scroll "row" is a GRID ROW that is data.selGridCols cells
+            // wide, so wheel/keys must page by grid rows -- not by single items.
+            // Use the column count the paint cached; List mode keeps one item
+            // per row (scrollCols == 1 -> scrollRows == itemCount).
+            const int scrollCols = (data.selGridCols > 0) ? data.selGridCols : 1;
+            const int scrollRows = viewmode::IsGrid(data.selViewMode)
+                ? viewmode::GridRows(itemCount, scrollCols)
+                : itemCount;
             // fix thse isseue.md #2/#3: summary-chip interactions live in the
             // same modal pump as the list. The owner-draw painter records the
             // chip strip + per-chip hit rects in list (id 110) client coords, so
@@ -9601,7 +10714,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 data.listSbActivityTick = GetTickCount64();
                 SetTimer(hwnd, 113, sbauto::kIdleHideMs, nullptr);
                 const int top = listscroll::OnWheel(data.listTopRow, delta,
-                                                    itemCount, visRows, 1);
+                                                    scrollRows, visRows, 1);
                 data.listTopRow = top;
                 RefreshGroupPanel(&data);
                 continue;
@@ -9625,7 +10738,7 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 }
                 if (nav) {
                     const int top = listscroll::OnKey(k, data.listTopRow,
-                                                      itemCount, visRows);
+                                                      scrollRows, visRows);
                     // fix thse isseue.md Phase B: keyboard scrolling also reveals
                     // the auto-hiding scrollbar and arms the idle-hide timer.
                     data.listSbActivityTick = GetTickCount64();
@@ -10910,6 +12023,9 @@ static bool PerformAutoGroupOperation(const std::vector<CapturedItem>& items,
         st.imagesParentName = g_autoGroupImageParentName;
         st.allFolderName = g_autoGroupFoldersName;
         st.noExtensionName = g_autoGroupNoExtensionName;
+        // Phase 6: parse the configured custom rules into a validated plan.
+        // Empty config -> no rules -> unchanged default behaviour.
+        st.customRules = autogroup::ParseCustomRules(g_autoGroupCustomRuleLines);
         LeaveCriticalSection(&g_templatesCs);
     }
 
@@ -12028,7 +13144,7 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
 BOOL WhTool_ModInit() {
     // Startup diagnostic. The version here MUST match the @version metadata
     // above.
-    Wh_Log(L"INIT: v0.12.61 ctrlg-group loaded");
+    Wh_Log(L"INIT: v0.12.65 ctrlg-group loaded");
     // Guard g_templates/g_templateCollision. Created BEFORE the first
     // LoadSettings() call (which publishes into them) and before the hook
     // starts, so no thread ever touches the CS uninitialised.
