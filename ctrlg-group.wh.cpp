@@ -7,7 +7,7 @@
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshlwapi -lshell32 -luser32 -luuid -luiautomationcore -lgdi32 -ladvapi32 -ld2d1
+// @compilerOptions -lole32 -loleaut32 -lshlwapi -lshell32 -luser32 -luuid -luiautomationcore -lgdi32 -ladvapi32 -ld2d1 -lcomctl32
 // ==/WindhawkMod==
 
 // For bug reports and feature requests, please open an issue here:
@@ -36,8 +36,10 @@ Make a new folder or batch of folders in File Explorer (including sub-folder & D
 > **Ctrl must stay down for the entire shortcut.** Let go and the gesture is
 > abandoned - nothing is created.
 
-**Esc** keeps the default name (`New folder`). Clicking away commits what you
-typed so far (like Explorer's own rename).
+**Esc** cancels in both naming modes: the temporary folder is removed and
+nothing is created. Pressing **Enter** on an empty name is what keeps the
+default `New folder`. In the inline box, clicking away commits what you typed
+so far (like Explorer's own rename); the popup box commits with its Create button.
 
 ## ⚙️ Settings
 
@@ -95,76 +97,45 @@ templates where you pre-define you folder names.)
 | ✏️ | **Name** | Assign a label, anything you like. Only for your reference. | `Images` |
 | ✏️ | **Folders** | Everything after the 2nd `=`, split on the `\|` pipe. Each piece is one folder. | `raw\|jpg\|png` |
 | ✅ | **Spaces are fine** | Spaces **inside or around** a name are kept exactly - `01 Explain & Brief`. Names are **not** trimmed,| `01 Explain & Brief` |
-| Folder | **26 templates max** | One per letter A-Z. | - |
-| Folder | **100 folders max** | Per template; each list is independent. | - |
-| Folder | **One template per key** | Same key twice = the **first** line wins, later ones ignored. Use a unique key per line. | - |
-| Invalid | **Bad characters** | A name containing `\` `/` `:` `*` `?` `"` `<` `>` `\|` is skipped (same set a typed name strips). So is `.`, `..`, or any name starting with `..`. | `a\b`, `../x`, `C:\x` |
-| Invalid | **Empty / all-spaces / control chars** | Blank pieces, spaces-only names, and control characters (below ASCII 0x20) are skipped. | (empty) |
-| Invalid | **Duplicate in one line** | The same name twice in one template is kept only once, **case-insensitively** (Windows folders). | `raw\|RAW` -> `raw` |
-| Safety | **Never overwrites** | Existing folders follow *Template name collisions* (skip / number / stop). | - |
+| 📂 | **26 templates max** | One per letter A-Z. | - |
+| 📂 | **100 folders max** | Per template; each list is independent. | - |
+| 📂 | **One template per key** | Same key twice = the **first** line wins, later ones ignored. Use a unique key per line. | - |
+| 😈 | **Bad characters** | A name containing `\` `/` `:` `*` `?` `"` `<` `>` `\|` is skipped (same set a typed name strips). So is `.`, `..`, or any name starting with `..`. | `a\b`, `../x`, `C:\x` |
+| 🌝 | **Empty / all-spaces / control chars** | Blank pieces, spaces-only names, and control characters (below ASCII 0x20) are skipped. | (empty) |
+| 🥴 | **Duplicate in one line** | The same name twice in one template is kept only once, **case-insensitively** (Windows folders). | `raw\|RAW` -> `raw` |
+| ⛑️ | **Never overwrites** | Existing folders follow *Template name collisions* (skip / number / stop). | - |
 
 > Note: the `,` comma is **allowed** in a folder name - only `\` `/` `:` `*`
 > `?` `"` `<` `>` `|` `..` and control characters are rejected.
 
 ## 🆚 How this is different
 
-### Ctrl+F+N vs. the other shortcut options
-All five New Folder options create and name folders the same way - the
-difference is which keys trigger it and what native Explorer behavior they take
-over. (**Ctrl+G** is NOT in this list - it is the dedicated Group Selection key,
-documented below.)
+### Ctrl+F+N vs. the other shortcut options. All Shortcut  options create and name folders the same way 
 
 | | **Ctrl+F+N** *(default)* | **Ctrl+Shift+N** | **Ctrl+N** | **Ctrl+N+F** | **Ctrl+Q** |
 |---|---|---|---|---|---|
 | Keys | Hold Ctrl, tap F, then N | Single press | Single press | Hold Ctrl, tap N, then F | Single press |
-| Native feature it uses | Ctrl+F (search) | New folder | New window | New window | (none) |
+| Native feature in 🪟 | Ctrl+F (search) | New folder | New window | New window | (none) |
 | Keeps native Explorer shortcut? | ✅ Ctrl+F search still opens if you don't press N | ➖ overlays the native New folder | ❌ replaces New window | ❌ replaces New window | ✅ uses a free key |
 | Accidental-trigger risk | Low (needs the F+N chord) | Low | Higher (single press) | Medium | Higher (single press) |
 | Naming + batch | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**In short:** pick **Ctrl+F+N** to keep every native Explorer shortcut intact,
-or **Ctrl+Shift+N** for the exact keys Windows already uses for New folder.
-**Ctrl+Q** is a free single-press key that doesn't collide with a native
-shortcut. **Ctrl+N** / **Ctrl+N+F** give up the "New window" shortcut.
+## Ctrl+G - Group Creation 🤝 | Gathers the files/folders you have selected in File Explorer
 
-### Ctrl+G - Group Creation (separate feature)
+-   1. Select anything in Explorer.
+-   2. Press **Ctrl+G**.
+-   3. In the popup, type a folder name, choose **Copy** or **Move**, and confirm.
 
-#### What Ctrl+G does
-
-**Ctrl+G** gathers the files/folders you have selected in File Explorer and puts
-them into ONE destination folder. It is completely separate from the Ctrl+F+N
-New Folder shortcut above and **never creates an empty folder** - it always
-groups the current selection.
-
-#### Quick start
-
-1. Select any mix of files/folders in Explorer.
-2. Press **Ctrl+G**.
-3. In the popup, type a folder name, choose **Copy** or **Move**, and confirm.
-
-Virtual / non-filesystem items (*This PC*, *Quick access*, ...) and an empty
+-   Virtual / non-filesystem items (*This PC*, *Quick access*, ...) and an empty
 selection are ignored safely - nothing happens.
 
-#### Choosing Copy or Move
-
-**Copy** (default) keeps the originals where they are; **Move** relocates them.
-Toggle the choice in the popup (click the segment, or focus it and press the
-Left/Right arrow keys).
-
-#### Destination and the remembered name
-
-By default items are grouped under the **current parent** of the selection. Set
-a **Fixed destination folder** in Settings to always group somewhere specific.
+#### Destination - By default items are grouped under the **current parent** of the selection. 
+Set a **Fixed destination folder** in Settings to always group somewhere specific.
 If you leave the folder-name box **blank**, the last successfully used target
-name is reused. Auto Group (below) ignores the typed name entirely and uses its
-own destination policy.
+name is reused. 
 
-#### Auto Group
-
-The timed **Auto Group** button sorts the selected files into folders named
-after their extensions (`JPG`, `PNG`, `MD`, ...) with no typing. The button
-unlocks after an **eight-second safety delay** (shown as a `0:08` -> `0:01`
-countdown) so a bulk reorganise is always deliberate.
+## Auto Group - Sorts the selected files into folders named after their extensions (`JPG`, `PNG`, `MD`, ...)
+Auto Group ignores the typed name entirely and uses its own destination policy.
 
 - **Flat** layout creates the extension folders directly in the destination.
 - **Images parent** layout nests image extensions under an `Images` folder while
@@ -188,7 +159,7 @@ Examples:
 - `Source Code=cpp|h|hpp|js|ts|py`
 - `Archives=zip|7z|rar|tar|gz`
 
-Matching is case-insensitive, `jpeg` collapses to `jpg` like the built-in
+**Matching is case-insensitive**, `jpeg` collapses to `jpg` like the built-in
 buckets, and the **first** rule wins when two rules list the same extension.
 Any extension not covered by a rule still goes to its normal extension folder,
 so an empty list keeps the standard one-folder-per-extension behaviour. Folder
@@ -478,6 +449,7 @@ hook / worker-thread design. Credit and thanks to their authors:
 #include <string>
 #include <cwctype>
 #include <vector>
+#include <unordered_map>    // fix thse isseue.md item 7: one-pass Auto Group file->bucket map
 #include <memory>
 #include <new>
 #include <d2d1.h>
@@ -540,7 +512,7 @@ static volatile LONG64 g_shortcutPacked =
 // exceeded even if the user sets maxFolders higher.
 static const int kFolderDefaultMax = 25;
 static const int kFolderHardCap = 100;
-static volatile LONG g_multiFolder = 0;                 // toggle (default off)
+static volatile LONG g_multiFolder = 0;                 // batch toggle; PRE-LoadSettings runtime value is 0, the CONFIGURED default is ON (settings schema: multiFolder true), applied by LoadSettings
 static volatile LONG g_hasTemplates = 0;                // 1 if >=1 template loaded (hook reads lock-free)
 static volatile LONG g_templateKeyMask = 0;             // #1: bit (c-'a') set == letter 'c' is a bound template key (hook reads lock-free)
 static volatile LONG g_maxFolders = kFolderDefaultMax;  // raw maxFolders setting
@@ -548,7 +520,7 @@ static volatile LONG g_autoResolveNames = 1;            // number clashes (defau
 static volatile LONG g_useDialog = 0;                   // Ctrl+F+N naming: 0 = inline rename (default), 1 = themed popup box. Both modes available.
 static volatile LONG g_openAfterCreate = 0;             // 0 = stay, 1 = open the new folder (single create only)
 static volatile LONG g_typeSpeed = 0;                   // 0=Normal, 1=Relaxed, 2=Patient (scales count + rename windows)
-static volatile LONG g_namingPattern = 0;              // 0=Space "N", 1=Dash2 "-0N", 2=Dash3 "-00N", 3=Paren2 " (0N)"
+static volatile LONG g_namingPattern = 0;              // 0=Space "N", 1=Dash2 "-0N", 2=Dash3 "-00N", 3=Paren2 " (0N)", 4=Under2 "_0N", 5=Under3 "_00N"
 // Ctrl+G "Group Selection" on/off toggle. Ctrl+G is a HARDWIRED, dedicated
 // group key -- it is NOT part of the New Folder `shortcut` $options and never
 // creates a folder. This gate lets the user turn the whole Ctrl+G feature off.
@@ -900,7 +872,7 @@ static void LoadSettings() {
     }
     InterlockedExchange(&g_groupCollision, groupCollision);
     // File-level collision behavior (Issue 1). Mirrors ParseGroupFileCollision:
-    // 0=Ask (default, native Replace/Skip box), 1=Replace, 2=Skip.
+    // 0=Ask (default, native Replace/Skip box), 1=Replace, 2=Skip, 3=Compare.
     PCWSTR groupFileColl = Wh_GetStringSetting(L"Group.groupFileCollision");
     LONG groupFileCollision = 0;  // Ask default
     if (groupFileColl) {
@@ -1019,7 +991,7 @@ static void LoadSettings() {
     }
     InterlockedExchange(&g_typeSpeed, speed);
 
-    // Batch numbering pattern (0=Space, 1=Dash2, 2=Dash3, 3=Paren2). Read as a
+    // Batch numbering pattern (0=Space, 1=Dash2, 2=Dash3, 3=Paren2, 4=Under2, 5=Under3). Read as a
     // string option like `trigger`; any unknown value maps to Space (default).
     PCWSTR namingPattern = Wh_GetStringSetting(L"NewFolder.namingPattern");
     LONG pattern = 0;  // space
@@ -1323,7 +1295,7 @@ static std::vector<std::wstring> MakeUniqueFolderNames(const std::wstring& dir,
 //   0 Space  : "<base> 1"
 //   1 Dash2  : "<base>-01"
 //   2 Dash3  : "<base>-001"
-//   3 Paren2 : "<base> (01)"
+//   3 Paren2 : "<base> (01)"   |   4 Under2 : "<base>_01"   |   5 Under3 : "<base>_001"
 static std::wstring PadNumber(int n, int width) {
     std::wstring s = std::to_wstring(n);
     while (static_cast<int>(s.size()) < width) {
@@ -2757,7 +2729,7 @@ struct PromptLayout {
     Rect selectedCard;
     Rect selectedHeader;
     Rect selectedList;
-    Rect selectedContent;  // fix #3: padded (16px) content rect; list HWND lives here
+    Rect selectedContent;  // fix #3: padded (kSelectedPad = 20px) content rect; list HWND lives here
     Rect groupHeader;   // alias of the whole selectedCard rect (card wiring only, #3)
 
     // Destination card (group only): label + read-only field.
@@ -2833,7 +2805,7 @@ inline constexpr int kGroupHeaderExpandedExtra = 120;  // Phase 7 expanded list 
 
 // ---- Group sectioned-card layout (Phase 3a) ----
 inline constexpr int kCardInset         = kSpace4;   // 16
-inline constexpr int kCardGap           = kSpace4;   // 12  (fix #7: aligned to the 4px scale)
+inline constexpr int kCardGap           = kSpace4;   // 16  (fix #7: aligned to the 4px scale)
 inline constexpr int kGroupTopMargin    = 14;
 inline constexpr int kGroupBottomMargin = kSpace4;   // 16
 inline constexpr int kSelHeaderH        = 34;
@@ -2917,7 +2889,7 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     // with it and the window grows to fit, so a small selection leaves no gap.
     // fix #9/#10: expanded mode is WIDER, not just taller. Width (and every
     // width derived from it) is chosen by mode so cards/fields/segments grow
-    // horizontally. Compact stays 344 -> byte-identical to the previous build.
+    // horizontally. Compact group width is kGroupCompactW (410); the legacy 344px kWindowW is the base / New Folder width, not the group compact width.
     const int winW     = expanded ? kGroupExpandedW : kGroupCompactW;
     const int contentW = winW - kOuterMargin * 2;
     const int innerX   = kOuterMargin + kCardInset;    // 32
@@ -2952,7 +2924,7 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
     int visRows = itemCount < capRows ? itemCount : capRows;
     if (visRows < 1) visRows = 1;   // always at least one row tall
     // fix thse isseue.md #3: the Selected card content is inset kSelectedPad
-    // (16px) on ALL four sides. The content block is the owner-draw rhythm:
+    // (20px, kSelectedPad) on ALL four sides. The content block is the owner-draw rhythm:
     //   title + gap + counts + gap + 1px divider + gap + visRows rows.
     // The card height is DERIVED from that content + the two paddings, so a
     // small selection leaves no empty space; the owner-drawn list HWND sits in
@@ -3055,7 +3027,8 @@ inline PromptLayout ReflowToClient(const PromptLayout& base,
                                    int clientW, int clientH,
                                    int minW, int minH,
                                    int selRowH = kSelRowH,
-                                   int selCapRowsOverride = -1) {
+                                   int selCapRowsOverride = -1,
+                                   int rowsNeededOverride = -1) {
     PromptLayout L = base;
     if (!base.isGroup) return L;              // New Folder keeps its fixed form
     if (clientW < minW) clientW = minW;
@@ -3092,7 +3065,15 @@ inline PromptLayout ReflowToClient(const PromptLayout& base,
     const int selCapRows  = (selCapRowsOverride >= 0)
                                 ? selCapRowsOverride
                                 : (base.expanded ? kListExpandedRows : kListCompactRows);
-    const bool selRowCapped = baseVisRows >= selCapRows;
+    // fix thse isseue.md P1 "exact fit treated as capped": overflow -- the only
+    // reason to pour extra height into the Selected card and start scrolling --
+    // means MORE rows are needed than the preferred viewport actually shows,
+    // NOT mere equality with the declared row cap. The caller supplies the true
+    // rows-needed (rowsNeededOverride); fall back to the legacy cap heuristic
+    // only when it is not provided.
+    const bool selRowCapped = (rowsNeededOverride >= 0)
+                                  ? (rowsNeededOverride > baseVisRows)
+                                  : (baseVisRows >= selCapRows);
     int selGrow = dy;
     if (dy > 0 && !selRowCapped) selGrow = 0;
 
@@ -3236,9 +3217,10 @@ inline constexpr unsigned FinalRepaintFlags() {
     return kRdwInvalidate | kRdwErase | kRdwUpdateNow | kRdwAllChildren;
 }
 
-inline constexpr bool FinalRepaintCoversChildren() {
-    return (FinalRepaintFlags() & kRdwAllChildren) != 0;
-}
+// (fix thse isseue.md section 3) FinalRepaintCoversChildren() was an unused
+// derived predicate with no production call site -- removed. The behavioural
+// guarantee it described (the final repaint includes RDW_ALLCHILDREN) is still
+// enforced by FinalRepaintFlags() above and pinned by tests/redraw_logic_test.cpp.
 
 }  // namespace redraw
 
@@ -4783,6 +4765,16 @@ inline int CapToMax(int desired, int maxExtent) {
     return desired;
 }
 
+// Raise an (already max/work-capped) card dimension to a FIXED minimum so a
+// card with little content still reads as a proper card. "Subject to available
+// space": the caller passes a minExtent ALREADY clamped to the work area, so
+// this never pushes the card off-screen. A zero/negative minimum means "no
+// floor".
+inline int CapToMin(int desired, int minExtent) {
+    if (minExtent > 0 && desired < minExtent) return minExtent;
+    return desired;
+}
+
 inline int ViewportHeight(int cardH, int headingBandH, int padBottom) {
     const int v = cardH - headingBandH - padBottom;
     return v > 0 ? v : 0;
@@ -5684,14 +5676,10 @@ static const COLORREF kColSurfaceDark      = RGB(32, 32, 32);
 static const COLORREF kColTextDark         = RGB(240, 240, 240);
 static const COLORREF kColInputDark        = RGB(84, 84, 84);    // #545454
 static const COLORREF kColInputTextDark    = RGB(240, 240, 240);
-// Danger reds -- reserved for the cancelled/failure STATUS band, NOT the Cancel
-// button (the button is a neutral secondary; #7 / #8).
-[[maybe_unused]] static const COLORREF kColDangerLight        = RGB(196, 43, 28); // #C42B1C
-[[maybe_unused]] static const COLORREF kColDangerLightPressed = RGB(176, 34, 22);
-[[maybe_unused]] static const COLORREF kColDangerLightBorder  = RGB(150, 32, 20);
-[[maybe_unused]] static const COLORREF kColDangerDark         = RGB(160, 42, 34);
-[[maybe_unused]] static const COLORREF kColDangerDarkPressed  = RGB(130, 34, 28);
-[[maybe_unused]] static const COLORREF kColDangerDarkBorder   = RGB(110, 28, 22);
+// (fix thse isseue.md section 3) The "danger red" palette (kColDangerLight and
+// its pressed/border + dark variants) was reserved for a cancelled/failure
+// STATUS band that no longer exists. All six constants were [[maybe_unused]]
+// and are removed; reintroduce them with the band if a status UI is ever added.
 // Neutral secondary button (Cancel + Copy/Move segments) -- a gray surface that
 // sits near the panel, so the primary accent Create is the only strong colour.
 static const COLORREF kColNeutralLight        = RGB(251, 251, 251); // #FBFBFB
@@ -6148,6 +6136,7 @@ struct NamePromptData {
     HWND segCopyBtn = nullptr;            // Phase 6/D: Copy segment (id 107, Group only)
     HWND segMoveBtn = nullptr;            // Phase 6/D: Move segment (id 108, Group only)
     HWND groupInfo = nullptr;             // Selected Items panel STATIC (scroll target)
+    HWND extToggleTip = nullptr;          // fix thse isseue.md P2 (10249-10250): tooltip giving the custom-drawn Show-extensions switch a real, state-aware accessible name
     HWND destLabel = nullptr;             // Destination card label (Group only)
     HWND destField = nullptr;             // Destination read-only field (Group only)
     HWND destCopyBtn = nullptr;           // Destination "copy path" button (id 111, Group only)
@@ -6198,6 +6187,7 @@ struct NamePromptData {
     int chipContentW = 0;                 // total chip-strip content width @ last paint (px)
     int chipViewportW = 0;                // chip-strip viewport width @ last paint (px)
     RECT chipStripRect = {0, 0, 0, 0};    // chip-strip hit/viewport area in list (id 110) client coords
+    RECT listRowsRect  = {0, 0, 0, 0};    // fix thse isseue.md P1: the REAL item-row viewport (below the header/chips/divider), list (id 110) client coords; the painter caches it so the wheel router scrolls rows ONLY over the rows, not the whole control
     std::vector<RECT> chipHitRects;       // per-chip clickable rect (client coords, already scroll-adjusted)
     std::vector<int> chipHitKind;         // chipfilter::Kind as int, parallel to chipHitRects
     std::vector<std::wstring> chipHitKey; // ext key per chip (empty unless Ext), parallel to chipHitRects
@@ -6265,15 +6255,12 @@ static bool EditParentIsGroup(HWND hwnd) {
 // Mirror of tests/group_logic.h formatters (kept byte-identical to the
 // unit-tested pure logic). GroupCountLineText/GroupItemListText were retired
 // once the Selected Items panel switched to the sel:: row formatters plus the
-// listscroll:: viewport model, so only the still-consumed operation /
-// destination / last-target formatters remain here.
-// Phase 6/D: the single Copy/Move toggle was replaced by two segments driven by
-// segmented::SegmentLabel, so this label helper is no longer called from the UI.
-// Kept (byte-identical to segmented::SegmentLabel) as the group_logic mirror;
-// [[maybe_unused]] so the retired call site does not trip -Wunused-function.
-[[maybe_unused]] static std::wstring GroupOperationLabelText(bool isMove) {
-    return isMove ? L"Move" : L"Copy";
-}
+// listscroll:: viewport model, so only the still-consumed destination /
+// last-target formatters remain here.
+// (fix thse isseue.md section 3) GroupOperationLabelText() was removed: the
+// single Copy/Move toggle it labelled was replaced by two segments driven by
+// segmented::SegmentLabel, so the helper had no call site (it was
+// [[maybe_unused]]) and no test or guard referenced it.
 // Destination card field text (Phase 3b): the destination is its OWN section
 // now, so this returns just the resolved destination for the read-only field,
 // with the secondary recent/last target appended only when relevant. dest::
@@ -6325,43 +6312,17 @@ static void ApplyDestFieldText(HWND field, const std::wstring& destPath,
     SetWindowTextW(field, full.c_str());
 }
 
-// Selected Items panel text (UI spec item 1/#15). Built ONCE from the
-// unit-tested sel:: row formatters + the listscroll:: viewport model so the
-// exact same string is produced at WM_CREATE and on every scroll refresh.
-// New Folder popups never call this (isGroup == false).
-// Superseded in Phase 5/C by the SS_OWNERDRAW list (WM_DRAWITEM id 110), which
-// draws rows directly from sel:: / listscroll::. Kept for reference / tests.
-[[maybe_unused]] static std::wstring BuildGroupPanelText(const NamePromptData* d) {
-    std::wstring header = sel::SummaryTitle(d->items.size());
-    header += L"\n";
-    header += sel::SummaryCounts(d->items);
-    // The mode decides how many rows the viewport shows; the unit-tested scroll
-    // model turns d->listTopRow into the visible slice, so wheel/keys can page
-    // through a large selection without changing the stored selection.
-    const mode::Mode listMode = d->expanded ? mode::Mode::Expanded
-                                            : mode::Mode::Compact;
-    const int visRows = mode::VisibleRows(listMode);
-    const listscroll::Range vr = listscroll::VisibleRange(
-        d->listTopRow, static_cast<int>(d->items.size()), visRows);
-    for (int r = 0; r < vr.count; ++r) {
-        const sel::Item& it = d->items[static_cast<size_t>(vr.first + r)];
-        std::wstring row = L"\n" + sel::RowName(it.name, it.isFolder);
-        const std::wstring ext = sel::ExtLabel(it.name, it.isFolder);
-        if (!ext.empty()) { row += L"   "; row += ext; }
-        const std::wstring sz = sel::HumanSize(it.sizeBytes);
-        if (!sz.empty()) { row += L"   "; row += sz; }
-        header += row;
-    }
-    // Destination + last-target are no longer part of this Selected Items blob
-    // (Phase 3b): they moved to their OWN Destination card so each section has
-    // its own rectangle. This panel now holds ONLY the Selected Items summary
-    // title, the file/folder counts and the visible rows.
-    return header;
-}
+// (fix thse isseue.md section 3/4) BuildGroupPanelText() -- the obsolete plain
+// multiline-STATIC Selected Items text builder -- was removed. The Selected
+// Items panel is an SS_OWNERDRAW list (WM_DRAWITEM id 110) that draws rows
+// directly from the unit-tested sel:: / listscroll:: models (see
+// RefreshGroupPanel below), so the text-blob builder had no call site (it was
+// [[maybe_unused]]) and no test or guard referenced it.
 
 // Re-render the Selected Items panel after the scroll position changes. The
-// panel is a plain multi-line STATIC; rebuilding its text is cheap and keeps a
-// single source of truth (BuildGroupPanelText). No-op for New Folder popups.
+// panel is an SS_OWNERDRAW list (WM_DRAWITEM id 110); a scroll only changes
+// d->listTopRow, so this just INVALIDATES it and the owner-draw repaints the new
+// visible slice from sel:: / listscroll:: -- no STATIC text is rebuilt. No-op for New Folder popups.
 static void RefreshGroupPanel(NamePromptData* d) {
     if (!d || !d->isGroup || !d->groupInfo) return;
     // Phase 5/C: the Selected Items panel is now an SS_OWNERDRAW list; scrolling
@@ -6384,6 +6345,17 @@ static void RefreshGroupPanel(NamePromptData* d) {
 // relies on). ApplyPromptLayout, WM_ERASEBKGND and WM_NCHITTEST all consume it,
 // so paint, hit-test and child-move can never disagree about the live geometry.
 static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptData* d);
+
+// fix thse isseue.md item 6 (P1 6417-6445): deferred-move commit model, mirror
+// of tests/failguard_logic.h. Defined HERE (ahead of its only consumer,
+// ApplyPromptLayout below) so it is in scope at the call site; the sibling
+// helpclass/gdiguard mirrors live later, each ahead of their own first use.
+namespace layoutdefer {
+inline bool DeferredCommitOk(bool beginOk, bool endOk) { return beginOk && endOk; }
+inline bool NeedsIndividualFallback(bool beginOk, bool endOk) {
+    return !DeferredCommitOk(beginOk, endOk);
+}
+}  // namespace layoutdefer
 
 static void ApplyPromptLayout(HWND hwnd, NamePromptData* d,
                               const layout::PromptLayout* reflowOverride = nullptr) {
@@ -6414,35 +6386,73 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d,
     // redraw::kRepaintChildOnMove == false: DeferWindowPos carries no per-move
     // repaint. Group-only children are null on the New Folder popup, so the
     // null-handle skip reproduces the old `isGroup && handle` guards exactly.
-    HDWP hdwp = BeginDeferWindowPos(16);
-    auto deferMove = [&](HWND h, const auto& r) {
-        if (h && hdwp) {
-            hdwp = DeferWindowPos(hdwp, h, nullptr,
-                                  S(r.x), S(r.y), S(r.w), S(r.h),
-                                  SWP_NOZORDER | SWP_NOACTIVATE);
+    // fix thse isseue.md P1 (6417-6445): collect every child move FIRST so a
+    // failed BeginDeferWindowPos()/EndDeferWindowPos() can replay them with
+    // individual SetWindowPos() calls. DeferWindowPos only APPLIES the moves on
+    // a successful EndDeferWindowPos(), so a broken batch moves ZERO children --
+    // without a fallback some controls would be left at stale coordinates.
+    struct PendingMove { HWND h; int x, y, w, ht; };
+    PendingMove moves[16];
+    int moveCount = 0;
+    auto queueMove = [&](HWND h, const auto& r) {
+        if (h && moveCount < 16) {
+            moves[moveCount++] = PendingMove{h, S(r.x), S(r.y), S(r.w), S(r.h)};
         }
     };
-    deferMove(d->groupInfo,   L.selectedContent);
-    deferMove(d->destLabel,   L.destLabel);
-    deferMove(d->destField,   inputfield::InnerEditRect(L.destField.x, L.destField.y, L.destField.w, L.destField.h));
-    deferMove(d->destCopyBtn, L.destCopyBtn);
-    deferMove(d->infoBtn,     L.infoButton);        // UI-03: footer info/help button
+    queueMove(d->groupInfo,   L.selectedContent);
+    queueMove(d->destLabel,   L.destLabel);
+    queueMove(d->destField,   inputfield::InnerEditRect(L.destField.x, L.destField.y, L.destField.w, L.destField.h));
+    queueMove(d->destCopyBtn, L.destCopyBtn);
+    queueMove(d->infoBtn,     L.infoButton);        // UI-03: footer info/help button
     // fix thse isseue.md Issue 1: the navigation-help card is a SEPARATE
     // non-activating popup window (not a child), so it is NOT laid out here;
     // PositionHelpCard() re-anchors it to the '?' button on move/resize/DPI.
-    deferMove(d->nameLabel,   L.nameLabel);
-    deferMove(d->edit,        inputfield::InnerEditRect(L.nameField.x, L.nameField.y, L.nameField.w, L.nameField.h));
-    deferMove(d->segCopyBtn,  L.segCopy);
-    deferMove(d->segMoveBtn,  L.segMove);
-    deferMove(d->createBtn,   L.createButton);
-    deferMove(d->cancelBtn,   L.cancelButton);
-    deferMove(d->autoGroupBtn, L.autoGroupButton);  // ADD-ON: keep the Auto Group button aligned on relayout
+    queueMove(d->nameLabel,   L.nameLabel);
+    queueMove(d->edit,        inputfield::InnerEditRect(L.nameField.x, L.nameField.y, L.nameField.w, L.nameField.h));
+    queueMove(d->segCopyBtn,  L.segCopy);
+    queueMove(d->segMoveBtn,  L.segMove);
+    queueMove(d->createBtn,   L.createButton);
+    queueMove(d->cancelBtn,   L.cancelButton);
+    queueMove(d->autoGroupBtn, L.autoGroupButton);  // ADD-ON: keep the Auto Group button aligned on relayout
     // fix thse isseu e.md #5: the size control stays in the tested chrome rect
     // so relayout can't drift it back onto the Selected Items card.
-    deferMove(d->sizeToggle,  L.chromeSizeBtn);
-    deferMove(d->minBtn,      L.chromeMinBtn);
-    deferMove(d->closeBtn,    L.chromeCloseBtn);
-    if (hdwp) EndDeferWindowPos(hdwp);
+    queueMove(d->sizeToggle,  L.chromeSizeBtn);
+    queueMove(d->minBtn,      L.chromeMinBtn);
+    queueMove(d->closeBtn,    L.chromeCloseBtn);
+
+    // Try the atomic deferred transaction first.
+    HDWP hdwp = BeginDeferWindowPos(moveCount);
+    const bool beginOk = (hdwp != nullptr);
+    bool committed = false;
+    if (beginOk) {
+        bool chainOk = true;
+        for (int i = 0; i < moveCount; ++i) {
+            HDWP next = DeferWindowPos(hdwp, moves[i].h, nullptr,
+                                       moves[i].x, moves[i].y, moves[i].w, moves[i].ht,
+                                       SWP_NOZORDER | SWP_NOACTIVATE);
+            if (!next) { chainOk = false; break; }  // handle is now invalid
+            hdwp = next;
+        }
+        if (chainOk) committed = (EndDeferWindowPos(hdwp) != FALSE);
+    }
+
+    // fix thse isseue.md P1 (6417-6445): if the batch could not be started or
+    // committed, no child actually moved -- replay every move individually so
+    // none are left at stale coordinates, and record genuine failures.
+    if (layoutdefer::NeedsIndividualFallback(beginOk, committed)) {
+        int moveFailures = 0;
+        for (int i = 0; i < moveCount; ++i) {
+            if (!SetWindowPos(moves[i].h, nullptr,
+                              moves[i].x, moves[i].y, moves[i].w, moves[i].ht,
+                              SWP_NOZORDER | SWP_NOACTIVATE)) {
+                ++moveFailures;
+            }
+        }
+        Wh_Log(L"ApplyPromptLayout: deferred child-move batch failed "
+               L"(beginOk=%d committed=%d); used individual SetWindowPos "
+               L"fallback (%d of %d moves failed)",
+               beginOk, committed, moveFailures, moveCount);
+    }
 
     // fix thse isseue.md #6: re-ellipsize the Destination path to the field's
     // NEW width, now that the batch has resized the field.
@@ -6527,8 +6537,8 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d,
     // compact/expanded size once the user has MAXIMIZED or hand-resized it
     // (that would snap it back / un-maximize it -- the old unconditional
     // SetWindowPos). The child controls were already positioned by the
-    // deferMove() pass above regardless; only the top-level window RESIZE is
-    // skipped, so Ctrl+E density then just reflows the content in place.
+    // queued child-move pass above regardless; only the top-level window RESIZE
+    // is skipped, so Ctrl+E density then just reflows the content in place.
     if (!d->manualSized && !IsZoomed(hwnd)) {
         SetWindowPos(hwnd, nullptr, np.x, np.y, outer.cx, outer.cy,
                      SWP_NOZORDER | SWP_NOACTIVATE);
@@ -6847,6 +6857,18 @@ inline bool RowShowsExtInline(bool toggleOn, bool isFolder) {
 // visible text label is gone, so the control still announces its purpose).
 inline const wchar_t* AccessibleName() { return L"Show file extensions"; }
 
+// State wording for assistive tech / the live tooltip (mirror of
+// show_ext_logic.h). The switch has no visible text, so the tooltip announces
+// whether extensions are currently shown.
+inline const wchar_t* StateWord(bool on) { return on ? L"on" : L"off"; }
+inline std::wstring AccessibleLabel(bool on) {
+    std::wstring s = AccessibleName();
+    s += L" (";
+    s += StateWord(on);
+    s += L")";
+    return s;
+}
+
 // Switch geometry (unit-agnostic; the renderer passes device px). The switch is
 // a 2:1 rounded "pill" track; the knob is a circle inset by `inset` on all
 // sides and sits at the LEFT when OFF and the RIGHT when ON. No space is ever
@@ -6863,6 +6885,65 @@ inline int SwitchKnobLeft(int trackLeft, int trackW, int trackH, int inset,
 }
 
 }  // namespace showext
+
+// fix thse isseue.md P2 (10249-10250): the Show-extensions switch is custom
+// drawn and has NO visible text, so its accessible name used to be computed and
+// immediately discarded. These helpers wire showext::AccessibleLabel() into a
+// REAL standard tooltip on the Selected-Items list (groupInfo), where the
+// switch is painted and hit-tested. The tooltip is a child-owned WS_POPUP, so
+// it is destroyed automatically with the popup -- no explicit teardown needed.
+
+// Push the current rect + state-aware label into the tooltip. Called on every
+// repaint (after chipToggleRect is recomputed) and after the on/off flip, so
+// the accessible name tracks resize, scroll and state. No-op until the tooltip
+// exists.
+static void SyncExtToggleTip(NamePromptData* d) {
+    if (!d || !d->extToggleTip || !d->groupInfo) return;
+    std::wstring label = showext::AccessibleLabel(d->showExt);
+    TTTOOLINFOW ti = {};
+    ti.cbSize = sizeof(ti);
+    ti.hwnd = d->groupInfo;
+    ti.uId = 1;  // the single rect-based tool registered in EnsureExtToggleTip
+    ti.rect = d->chipToggleRect;
+    SendMessageW(d->extToggleTip, TTM_NEWTOOLRECTW, 0,
+                 reinterpret_cast<LPARAM>(&ti));
+    ti.lpszText = const_cast<wchar_t*>(label.c_str());
+    SendMessageW(d->extToggleTip, TTM_UPDATETIPTEXTW, 0,
+                 reinterpret_cast<LPARAM>(&ti));
+}
+
+// Create the tooltip once and register a single rect-based tool over the switch
+// (TTF_SUBCLASS lets it relay hover automatically from the owner-draw list).
+// Guarded so a creation failure degrades gracefully (no tooltip, no crash).
+static void EnsureExtToggleTip(NamePromptData* d, HWND groupInfo, HINSTANCE hinst) {
+    if (!d || d->extToggleTip || !groupInfo) return;
+    static bool iccDone = false;
+    if (!iccDone) {
+        INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_BAR_CLASSES };
+        InitCommonControlsEx(&icc);  // ensure the TOOLTIPS_CLASS is registered
+        iccDone = true;
+    }
+    HWND tip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
+        WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        groupInfo, nullptr, hinst, nullptr);
+    if (!tip) {
+        Wh_Log(L"EnsureExtToggleTip: tooltip creation failed; the "
+               L"Show-extensions switch has no accessible tooltip this session");
+        return;
+    }
+    d->extToggleTip = tip;
+    std::wstring label = showext::AccessibleLabel(d->showExt);
+    TTTOOLINFOW ti = {};
+    ti.cbSize = sizeof(ti);
+    ti.uFlags = TTF_SUBCLASS;  // auto-relay hover from the owner-draw list
+    ti.hwnd = groupInfo;
+    ti.uId = 1;
+    ti.hinst = hinst;
+    ti.rect = d->chipToggleRect;  // refined by SyncExtToggleTip on each paint
+    ti.lpszText = const_cast<wchar_t*>(label.c_str());
+    SendMessageW(tip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+}
 
 // ---- Image-thumbnail model (fix thse isseue.md Issue 2) ----
 // Byte-for-byte mirror of tests/thumb_logic.h. Pure. Single source of truth for
@@ -6933,6 +7014,141 @@ inline int RequestPx(int cellW, int cellH) {
 }
 
 }  // namespace thumbs
+
+// ---- Thumbnail worker lifecycle model (fix thse isseue.md P1) --------------
+// Byte-for-byte mirror of tests/thumb_lifecycle_logic.h. Pure. These predicates
+// own the worker lifecycle invariants that a static audit flagged as unsafe:
+//   * initialization is published only when every handle the worker needs
+//     exists (otherwise it stays retryable),
+//   * thread-owned resources are freed only after CONFIRMED termination,
+//   * an extracted bitmap is accepted only with valid, positive metadata.
+// EnsureThumbThread / StopThumbThread / ThumbThreadProc below CONSUME these.
+namespace thumblife {
+inline bool ShouldMarkInitialized(bool eventCreated, bool threadCreated) {
+    return eventCreated && threadCreated;
+}
+inline bool CanRetryInit(bool thumbInit) {
+    return !thumbInit;
+}
+inline bool SafeToReleaseAfterWait(bool threadConfirmedExited) {
+    return threadConfirmedExited;
+}
+inline bool IsValidThumbnailMetadata(bool getObjectOk, int w, int h) {
+    return getObjectOk && w > 0 && h > 0;
+}
+}  // namespace thumblife
+
+// ---- Keyboard focus routing (fix thse isseue.md P1) ------------------------
+// Byte-for-byte mirror of tests/focus_route_logic.h. ONE classification of the
+// interactive controls so chip Left/Right AND list Up/Down/Home/End/Page keys
+// share a single rule: a nav keystroke drives the chip strip / Selected list
+// ONLY when no interactive control owns focus. The modal loop CONSUMES these.
+namespace focusroute {
+inline bool IsInteractiveFocus(bool edit, bool createBtn, bool cancelBtn,
+                               bool copySegment, bool moveSegment,
+                               bool destCopyBtn, bool autoGroupBtn,
+                               bool infoBtn, bool sizeToggle,
+                               bool minBtn, bool closeBtn) {
+    return edit || createBtn || cancelBtn || copySegment || moveSegment ||
+           destCopyBtn || autoGroupBtn || infoBtn || sizeToggle ||
+           minBtn || closeBtn;
+}
+inline bool NavKeysDriveChipsOrList(bool interactiveFocus) {
+    return !interactiveFocus;
+}
+}  // namespace focusroute
+
+// ---- Honest partial Group-operation result accounting (fix thse isseue.md
+//      P1, 13565-13620 / 14299-14320). Mirrors tests/group_logic.h
+//      (namespace groupresult). PerformGroupOperation used to return a bare
+//      bool and the Ctrl+G caller logged the ORIGINAL selection size on
+//      success, over-reporting on every partial run. These helpers fold the
+//      raw per-item tallies into an HONEST grouped count + outcome kind so the
+//      live log never claims more than actually landed in the destination. ----
+namespace groupresult {
+struct GroupOpOutcome {
+    int requested = 0;       // non-virtual, non-empty items considered
+    int skipped = 0;         // dropped by the skip-existing collision policy
+    int failedToQueue = 0;   // SHCreateItemFromParsingName / Move|Copy failed
+    int queued = 0;          // operations actually handed to the shell batch
+    bool performed = false;  // PerformOperations() returned SUCCEEDED(hr)
+    bool aborted = false;    // GetAnyOperationsAborted() reported an abort
+};
+enum class GroupResultKind { NothingToDo, Complete, Partial, Failed };
+struct GroupResultSummary {
+    GroupResultKind kind = GroupResultKind::NothingToDo;
+    int grouped = 0;         // honest count that actually landed
+    bool groupedExact = true;// false only when aborted (grouped is upper bound)
+    int requested = 0;
+    int skipped = 0;
+    int failed = 0;          // == failedToQueue
+};
+inline bool GroupOutcomeConsistent(const GroupOpOutcome& o) {
+    return o.requested == o.queued + o.skipped + o.failedToQueue;
+}
+inline GroupResultSummary ClassifyGroupResult(const GroupOpOutcome& o) {
+    GroupResultSummary s;
+    s.requested = o.requested;
+    s.skipped = o.skipped;
+    s.failed = o.failedToQueue;
+    if (o.requested <= 0) {
+        s.kind = GroupResultKind::NothingToDo; s.grouped = 0; s.groupedExact = true;
+        return s;
+    }
+    if (!o.performed || o.queued <= 0) {
+        s.kind = GroupResultKind::Failed; s.grouped = 0; s.groupedExact = true;
+        return s;
+    }
+    if (o.aborted) {
+        s.kind = GroupResultKind::Partial; s.grouped = o.queued; s.groupedExact = false;
+        return s;
+    }
+    s.grouped = o.queued; s.groupedExact = true;
+    const bool everything =
+        (o.queued == o.requested && o.skipped == 0 && o.failedToQueue == 0);
+    s.kind = everything ? GroupResultKind::Complete : GroupResultKind::Partial;
+    return s;
+}
+}  // namespace groupresult
+
+// ---- fix thse isseue.md item 6 failure-handling mirrors. Byte-for-byte with
+//      tests/failguard_logic.h so a unit test pins each decision while the mod
+//      uses it at the un-compilable Win32 call sites. (namespace layoutdefer is
+//      defined earlier, just above ApplyPromptLayout, because that function --
+//      which appears before this block -- consumes it.) ----
+namespace helpclass {
+inline unsigned long ClassAlreadyExistsCode() { return 1410UL; }  // ERROR_CLASS_ALREADY_EXISTS
+inline bool RegistrationUsable(bool registered, unsigned long lastErr) {
+    return registered || lastErr == ClassAlreadyExistsCode();
+}
+}  // namespace helpclass
+namespace gdiguard {
+inline bool ShouldDrawGlyph(bool fontCreated, bool selectOk) { return fontCreated && selectOk; }
+inline bool ShouldRestoreOldFont(bool selectOk) { return selectOk; }
+inline bool MustDeleteCreatedFont(bool fontCreated) { return fontCreated; }
+}  // namespace gdiguard
+
+// ---- fix thse isseue.md item 7 performance mirrors. Byte-for-byte with
+//      tests/perf_logic.h. autogroupbucket:: builds the Auto Group file->bucket
+//      assignment in ONE pass; thumbcache:: dedups requests and bounds the
+//      async thumbnail cache. ----
+namespace autogroupbucket {
+inline std::wstring NormalizeDirKey(const std::wstring& dir) {
+    std::wstring k;
+    k.reserve(dir.size());
+    for (wchar_t c : dir) {
+        if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+        else if (c == L'/')         c = L'\\';
+        k.push_back(c);
+    }
+    return k;
+}
+}  // namespace autogroupbucket
+namespace thumbcache {
+inline int MaxEntries() { return 128; }
+inline bool ShouldEvict(int cacheSize, int maxEntries) { return cacheSize > maxEntries; }
+inline bool ShouldEnqueue(bool keyAlreadyPresent) { return !keyAlreadyPresent; }
+}  // namespace thumbcache
 
 // ---- Remembered Group popup placement model (fix thse isseue.md Issue 6) ----
 // Byte-for-byte mirror of tests/winplace_logic.h. Pure. Clamps a remembered
@@ -7559,6 +7775,61 @@ inline bool DensityMayResizeWindow(bool isZoomed) { return !isZoomed; }
 // boundaries can never drift out of sync with the controls inside them. New
 // Folder is never a Group popup and is never manualSized/zoomed, so it always
 // gets its original untouched geometry; initial preferred sizing is unchanged.
+//
+// fix thse isseue.md P0 (initial-layout lifecycle): the grid-cell "effective
+// preferred" sizing used to live INLINE here, so only the resize path (WM_SIZE)
+// ran it; the first visible frame used the raw ComputePromptLayout preset and
+// disagreed. It is now the shared, unit-tested efflayout:: model below (byte-
+// for-byte mirror of tests/effective_layout_logic.h), so the first frame
+// (initial outer size + WM_CREATE) and this path use ONE calculation.
+namespace efflayout {
+
+struct ReflowMetrics {
+    int selRowH;     // row height handed to layout::ReflowToClient
+    int selCap;      // whole-cell cap (-1 = ReflowToClient's own cap)
+    int rowsNeeded;  // true content rows the reflow must know about
+};
+
+inline ReflowMetrics GridSizedPreferred(layout::PromptLayout& base, bool isGrid,
+                                        int itemCount, int cellH, int visRows,
+                                        int rowsNeeded) {
+    ReflowMetrics m{ layout::kSelRowH, -1, itemCount };
+    if (!isGrid) return m;
+    const int headerBlockH = base.selectedList.y - base.selectedContent.y;
+    const int listBudget   = base.selectedContent.h - headerBlockH;
+    int fit = (cellH > 0) ? listBudget / cellH : 0;  // whole cells in the budget
+    if (fit < 1) fit = 1;
+    const int newContentH = headerBlockH + visRows * cellH;
+    const int delta = newContentH - base.selectedContent.h;
+    if (delta != 0) {
+        base.selectedContent.h += delta;
+        base.selectedList.h    += delta;
+        base.selectedCard.h    += delta;
+        base.groupHeader.h     += delta;
+        const auto shiftY = [delta](layout::Rect& r) {
+            if (r.w > 0) r.y += delta;
+        };
+        shiftY(base.destCard);     shiftY(base.destLabel);
+        shiftY(base.destDesc);     shiftY(base.destField);
+        shiftY(base.destCopyBtn);
+        shiftY(base.nameCard);     shiftY(base.nameLabel);
+        shiftY(base.nameDesc);     shiftY(base.nameField);
+        shiftY(base.actionCard);   shiftY(base.actionTitle);
+        shiftY(base.actionDesc);
+        shiftY(base.segCopy);      shiftY(base.segMove);
+        shiftY(base.opToggle);     shiftY(base.keyboardHint);
+        shiftY(base.createButton); shiftY(base.cancelButton);
+        shiftY(base.autoGroupButton); shiftY(base.infoButton);
+        base.windowH += delta;
+    }
+    m.selRowH    = cellH;
+    m.selCap     = fit;
+    m.rowsNeeded = rowsNeeded;
+    return m;
+}
+
+}  // namespace efflayout
+
 static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptData* d) {
     layout::PromptLayout base = layout::ComputePromptLayout(
         d->isGroup, d->expanded, static_cast<int>(d->items.size()));
@@ -7580,6 +7851,10 @@ static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptDa
     // into ReflowToClient).
     int selRowHForReflow = layout::kSelRowH;   // List default (24px row)
     int selCapForReflow  = -1;                 // List: use ReflowToClient's own cap
+    // fix thse isseue.md P1 "exact fit treated as capped": hand the reflow the
+    // TRUE number of rows the content needs so it grows the card only on real
+    // overflow. List is one column -> one row per item.
+    int rowsNeededForReflow = static_cast<int>(d->items.size());
     if (viewmode::IsGrid(d->selViewMode)) {
         const int gutter =
             listscroll::kScrollbarW + listscroll::kMetaScrollGap;
@@ -7590,36 +7865,21 @@ static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptDa
             base.selectedList.y - base.selectedContent.y;
         const int listBudget = base.selectedContent.h - headerBlockH;
         const int cellH    = viewmode::CellH(d->selViewMode);
-        int fit = (cellH > 0) ? listBudget / cellH : 0;   // whole cells in the preferred budget
-        if (fit < 1) fit = 1;
         const int visRows = viewmode::SelectedGridVisibleRows(
             d->selViewMode, itemCount, cols, listBudget);
-        const int newContentH = headerBlockH + visRows * cellH;
-        const int delta = newContentH - base.selectedContent.h;
-        if (delta != 0) {
-            base.selectedContent.h += delta;
-            base.selectedList.h    += delta;
-            base.selectedCard.h    += delta;
-            base.groupHeader.h     += delta;
-            const auto shiftY = [delta](layout::Rect& r) {
-                if (r.w > 0) r.y += delta;
-            };
-            shiftY(base.destCard);     shiftY(base.destLabel);
-            shiftY(base.destDesc);     shiftY(base.destField);
-            shiftY(base.destCopyBtn);
-            shiftY(base.nameCard);     shiftY(base.nameLabel);
-            shiftY(base.nameDesc);     shiftY(base.nameField);
-            shiftY(base.actionCard);   shiftY(base.actionTitle);
-            shiftY(base.actionDesc);
-            shiftY(base.segCopy);      shiftY(base.segMove);
-            shiftY(base.opToggle);     shiftY(base.keyboardHint);
-            shiftY(base.createButton); shiftY(base.cancelButton);
-            shiftY(base.autoGroupButton); shiftY(base.infoButton);
-            base.windowH += delta;
-        }
-        // Mode-aware metrics the resize/maximize reflow MUST use (never 24px).
-        selRowHForReflow = cellH;
-        selCapForReflow  = fit;
+        // fix thse isseue.md P0 (initial-layout lifecycle): grid-cell sizing of
+        // the Selected card + the matching downward shift of every section below
+        // is the shared, unit-tested efflayout:: model, so the FIRST frame
+        // (initial outer size + WM_CREATE) and this resize/maximize path use ONE
+        // calculation -- no startup-only coordinates. The three locals keep their
+        // names so they still feed layout::ReflowToClient the mode's whole-cell
+        // height + cap below exactly as before.
+        const efflayout::ReflowMetrics em = efflayout::GridSizedPreferred(
+            base, /*isGrid=*/true, itemCount, cellH, visRows,
+            viewmode::GridRows(itemCount, cols));
+        selRowHForReflow    = em.selRowH;
+        selCapForReflow     = em.selCap;
+        rowsNeededForReflow = em.rowsNeeded;
     }
 
     // Preferred / remembered-size popup: the (now mode-aware) base IS the layout.
@@ -7639,7 +7899,7 @@ static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptDa
     return layout::ReflowToClient(base,
         MulDiv(cw, 96, ddpi), MulDiv(ch, 96, ddpi),
         winresize::MinClientW(), winresize::MinClientH(),
-        selRowHForReflow, selCapForReflow);
+        selRowHForReflow, selCapForReflow, rowsNeededForReflow);
 }
 
 // Win32 EXTRACTION + per-popup cache for the Phase 1 DPI-aware Shell icon
@@ -8363,8 +8623,26 @@ static void DrawSemanticSectionIconDev(HDC hdc, semanticicon::Section section,
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfQuality = CLEARTYPE_NATURAL_QUALITY;
     lstrcpynW(lf.lfFaceName, face, LF_FACESIZE);
+    // fix thse isseue.md P2 (8366-8378): defensive GDI handling under resource
+    // pressure. Never select a null font onto the DC, never draw with an
+    // unknown font, never restore an invalid previous object, and always delete
+    // a font we created.
     HFONT iconFont = CreateFontIndirectW(&lf);
-    HGDIOBJ oldF   = SelectObject(hdc, iconFont);
+    if (!gdiguard::MustDeleteCreatedFont(iconFont != nullptr)) {
+        Wh_Log(L"DrawSemanticSectionIconDev: CreateFontIndirectW failed; "
+               L"glyph skipped");
+        return;  // no font -> nothing to select, draw, or delete
+    }
+    HGDIOBJ oldF = SelectObject(hdc, iconFont);
+    const bool selectOk = (oldF != nullptr && oldF != HGDI_ERROR);
+    if (!gdiguard::ShouldDrawGlyph(/*fontCreated*/true, selectOk)) {
+        // Could not select the font: do not draw with an unknown font and do
+        // not restore an invalid previous object, but still free the font.
+        DeleteObject(iconFont);
+        Wh_Log(L"DrawSemanticSectionIconDev: SelectObject(font) failed; "
+               L"glyph skipped");
+        return;
+    }
     const int oldBk       = SetBkMode(hdc, TRANSPARENT);
     const COLORREF oldClr = SetTextColor(hdc, ink);
     const wchar_t glyph[2] = { static_cast<wchar_t>(spec.id), L'\0' };
@@ -8373,7 +8651,9 @@ static void DrawSemanticSectionIconDev(HDC hdc, semanticicon::Section section,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
     SetTextColor(hdc, oldClr);
     SetBkMode(hdc, oldBk);
-    SelectObject(hdc, oldF);
+    if (gdiguard::ShouldRestoreOldFont(selectOk)) {
+        SelectObject(hdc, oldF);
+    }
     DeleteObject(iconFont);
 }
 
@@ -8459,11 +8739,19 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
                 if (SUCCEEDED(factory->GetImage(
                         sz, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK, &hb)) && hb) {
                     BITMAP bm = {};
-                    GetObject(hb, sizeof(bm), &bm);
-                    bmp = hb;
-                    bw = bm.bmWidth;
-                    bh = bm.bmHeight;
-                    ok = true;
+                    // thumblife::IsValidThumbnailMetadata: accept the bitmap ONLY
+                    // when GetObject succeeded with positive dimensions; drop and
+                    // release anything else (fix thse isseue.md P2 / 8460-8468).
+                    const bool metaOk =
+                        GetObject(hb, sizeof(bm), &bm) == static_cast<int>(sizeof(bm));
+                    if (thumblife::IsValidThumbnailMetadata(metaOk, bm.bmWidth, bm.bmHeight)) {
+                        bmp = hb;
+                        bw = bm.bmWidth;
+                        bh = bm.bmHeight;
+                        ok = true;
+                    } else {
+                        DeleteObject(hb);
+                    }
                 }
                 factory->Release();
             }
@@ -8495,10 +8783,12 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
                 e.failed = !ok;
                 d->thumbCache.push_back({key, e});
             }
+            // Read the owner HWND under the SAME lock GetThumbnailForPaint
+            // publishes it under (fix thse isseue.md P1: synchronize ownerHwnd).
+            HWND owner = d->ownerHwnd;
             LeaveCriticalSection(&d->thumbCs);
             if (!ok && bmp) DeleteObject(bmp);
 
-            HWND owner = d->ownerHwnd;
             if (owner) PostMessageW(owner, WM_APP_THUMB_READY, 0, 0);
         }
     }
@@ -8507,12 +8797,28 @@ static DWORD WINAPI ThumbThreadProc(LPVOID param) {
 }
 
 static void EnsureThumbThread(NamePromptData* d) {
-    if (!d || d->thumbInit) return;
+    if (!d || d->thumbInit) return;  // thumblife::CanRetryInit gates re-entry:
+                                     // only (re)create while init is not done.
     InitializeCriticalSection(&d->thumbCs);
     d->thumbStop = 0;
     d->thumbWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto-reset
-    d->thumbInit = true;
+    if (!d->thumbWake) {
+        // Event creation failed. Unwind the critical section and leave
+        // thumbInit=false so a later paint RETRIES instead of being stuck on
+        // the Shell-icon fallback forever (fix thse isseue.md P1 / 8509-8516).
+        DeleteCriticalSection(&d->thumbCs);
+        return;
+    }
     d->thumbThread = CreateThread(nullptr, 0, ThumbThreadProc, d, 0, nullptr);
+    // thumblife::ShouldMarkInitialized: publish init ONLY when BOTH the wake
+    // event and the worker thread exist. Otherwise unwind and stay retryable.
+    if (!thumblife::ShouldMarkInitialized(d->thumbWake != nullptr,
+                                          d->thumbThread != nullptr)) {
+        if (d->thumbWake) { CloseHandle(d->thumbWake); d->thumbWake = nullptr; }
+        DeleteCriticalSection(&d->thumbCs);
+        return;  // thumbInit stays false -> a later frame retries.
+    }
+    d->thumbInit = true;
 }
 
 // fix thse isseue.md Issue 2: stop + free the thumbnail worker and every cached
@@ -8523,14 +8829,30 @@ static void StopThumbThread(NamePromptData* d) {
     InterlockedExchange(&d->thumbStop, 1);
     if (d->thumbWake) SetEvent(d->thumbWake);
     if (d->thumbThread) {
-        WaitForSingleObject(d->thumbThread, 3000);
-        CloseHandle(d->thumbThread);
-        d->thumbThread = nullptr;
+        // The worker dereferences *d (its critical section, bitmap cache and
+        // ownerHwnd) and d is about to be destroyed, so freeing anything the
+        // worker can still touch BEFORE it has stopped is a use-after-free.
+        // thumbStop is re-checked before every queued item, so only the single
+        // in-flight extraction can delay exit. Give it a grace period, then --
+        // only if it has NOT confirmed termination -- wait without a premature
+        // timeout. thumblife::SafeToReleaseAfterWait gates the teardown below so
+        // thread-owned resources are released ONLY after a confirmed exit.
+        bool confirmedExit =
+            (WaitForSingleObject(d->thumbThread, 3000) == WAIT_OBJECT_0);
+        if (!confirmedExit)
+            confirmedExit =
+                (WaitForSingleObject(d->thumbThread, INFINITE) == WAIT_OBJECT_0);
+        if (thumblife::SafeToReleaseAfterWait(confirmedExit)) {
+            CloseHandle(d->thumbThread);
+            d->thumbThread = nullptr;
+        }
     }
     if (d->thumbWake) {
         CloseHandle(d->thumbWake);
         d->thumbWake = nullptr;
     }
+    // Worker confirmed gone: only now is it safe to tear down the thread-owned
+    // critical section and the cached bitmaps it could otherwise still touch.
     EnterCriticalSection(&d->thumbCs);
     for (auto& kv : d->thumbCache)
         if (kv.second.bmp) DeleteObject(kv.second.bmp);
@@ -8548,12 +8870,16 @@ static HBITMAP GetThumbnailForPaint(NamePromptData* d, HWND owner,
                                     const std::wstring& path, int px,
                                     int* outW, int* outH) {
     if (!d || path.empty() || px <= 0) return nullptr;
-    d->ownerHwnd = owner;
     EnsureThumbThread(d);
+    if (!d->thumbInit) return nullptr;  // worker init failed -> icon fallback;
+                                        // the critical section is NOT valid, so
+                                        // do not touch it (fix thse isseue.md P1).
     const std::wstring key = path + L"|" + std::to_wstring(px);
     HBITMAP result = nullptr;
     bool enqueue = false;
     EnterCriticalSection(&d->thumbCs);
+    d->ownerHwnd = owner;  // publish under the SAME lock the worker reads it
+                           // under (fix thse isseue.md P1: synchronize ownerHwnd).
     bool found = false;
     for (auto& kv : d->thumbCache) {
         if (kv.first == key) {
@@ -8566,7 +8892,24 @@ static HBITMAP GetThumbnailForPaint(NamePromptData* d, HWND owner,
             break;
         }
     }
-    if (!found) {
+    if (thumbcache::ShouldEnqueue(found)) {
+        // fix thse isseue.md item 7: BOUND the cache. Scrolling a large image
+        // selection used to grow thumbCache (and its GDI bitmaps) without limit.
+        // Before adding a new entry, if we are past the cap evict the OLDEST
+        // COMPLETED entry (never an in-flight one the worker may still write --
+        // we hold thumbCs here, as does the worker) and free its bitmap.
+        if (thumbcache::ShouldEvict(static_cast<int>(d->thumbCache.size()) + 1,
+                                    thumbcache::MaxEntries())) {
+            for (size_t i = 0; i < d->thumbCache.size(); ++i) {
+                if (d->thumbCache[i].second.done) {  // oldest completed entry
+                    if (d->thumbCache[i].second.bmp) {
+                        DeleteObject(d->thumbCache[i].second.bmp);
+                    }
+                    d->thumbCache.erase(d->thumbCache.begin() + i);
+                    break;
+                }
+            }
+        }
         d->thumbCache.push_back({key, NamePromptData::ThumbEntry{}});  // mark requested
         d->thumbQueueReq.push_back({path, px});
         enqueue = true;
@@ -8848,8 +9191,8 @@ static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
     const int gutterW     = S(listscroll::kScrollbarW + 4);   // nav-help: REUSE the Selected Items thick scrollbar width (kScrollbarW) + a 2px inset each side, so the help thumb matches
     const int headingBandH = padTop + headingH + headingGap;
     const int minW        = S(240);
-    const int maxCardW    = S(350);   // nav-help: a little WIDER than before (was 320, +30) for easier reading; the body still wraps to it and never widens with content
-    const int maxCardH    = S(280);   // nav-help: a little TALLER than before (was 240, +40); the full navigation help still scrolls INTERNALLY and the card never grows past this
+    const int maxCardW    = S(360);   // nav-help spec (fix thse isseue.md add-on section 2): 360 logical px wide at 96 DPI; the body wraps to it and never widens with content
+    const int maxCardH    = S(320);   // nav-help spec (fix thse isseue.md add-on section 2): 320 logical px MAX height at 96 DPI; taller content scrolls INTERNALLY, the card never grows past this
     const int margin      = S(16);
 
     HDC hdc = GetDC(parent);
@@ -8915,6 +9258,13 @@ static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
     // / NeedsScroll below) instead of enlarging the card.
     int cardH = helpscroll::CapToMax(desiredH, maxCardH);
     if (workH > 0) cardH = helpscroll::CapToWorkArea(cardH, workH, margin);
+    // fix thse isseue.md add-on section 2: keep a practical MINIMUM height (180
+    // logical px) so a short card still reads as a card. The floor is itself
+    // clamped to the work area ("subject to available space") so it is never
+    // pushed off-screen on a tiny monitor.
+    int minCardH = S(180);
+    if (workH > 0) minCardH = helpscroll::CapToWorkArea(minCardH, workH, margin);
+    cardH = helpscroll::CapToMin(cardH, minCardH);
     out.cy = cardH;
 
     if (d) {
@@ -8936,8 +9286,21 @@ static void EnsureHelpCardClass(HINSTANCE hinst) {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = nullptr;   // painted fully in WM_PAINT
     wc.lpszClassName = kHelpCardClass;
-    RegisterClassExW(&wc);
-    reg = true;
+    // fix thse isseue.md P2 (8929-8941): only mark the class registered when it
+    // is actually usable. Previously `reg` was set unconditionally, so a failed
+    // RegisterClassExW() (other than "already exists") permanently blocked every
+    // retry and left EnsureHelpCard() creating windows for a missing class.
+    if (RegisterClassExW(&wc) != 0) {
+        reg = true;
+        return;
+    }
+    const DWORD err = GetLastError();
+    if (helpclass::RegistrationUsable(/*registered*/false, err)) {
+        reg = true;  // benign: the class already exists from a prior call
+    } else {
+        Wh_Log(L"EnsureHelpCardClass: RegisterClassExW failed (error=%lu); "
+               L"will retry on next use", err);
+    }
 }
 
 static void EnsureHelpCard(HWND parent, NamePromptData* d) {
@@ -9037,6 +9400,10 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 SendMessageW(groupInfo, WM_SETFONT,
                              reinterpret_cast<WPARAM>(font), TRUE);
                 d->groupInfo = groupInfo;   // scroll refresh target (Phase 2)
+                // fix thse isseue.md P2 (10249-10250): give the custom-drawn
+                // Show-extensions switch a REAL, state-aware accessible name via
+                // a tooltip on this list (where it is painted + hit-tested).
+                EnsureExtToggleTip(d, groupInfo, hinst);
 
                 // Compact/Expanded size toggle button (#11, Phase 7): a small
                 // owner-neutral control in the header's top-right corner. Click
@@ -10001,7 +10368,7 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 SetBkMode(hdc, TRANSPARENT);
                 HGDIOBJ oldFont = SelectObject(hdc, UiFont(dpi));
 
-                const int left  = rc.left;   // #3: 16px inset is the selectedContent rect, not here
+                const int left  = rc.left;   // #3: 20px inset (kSelectedPad) is the selectedContent rect, not here
                 // fix thse isseue.md #4: the inner list content stops a dedicated
                 // right inset short of the child's right edge, so rows, the
                 // size/extension metadata, chip clipping, the divider endpoint and
@@ -10128,6 +10495,10 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const int stripRight = tbar.strip.right;
                 d->chipToggleRect = RECT{tbar.toolbar.left, tbar.toolbar.top,
                                          tbar.toolbar.right, tbar.toolbar.bottom};
+                // fix thse isseue.md P2 (10249-10250): keep the switch's
+                // accessible tooltip aligned to its live rect + current state,
+                // so the name stays correct after resize, scroll and on/off.
+                SyncExtToggleTip(d);
                 d->chipStripRect = RECT{left, chipTop, stripRight, chipTop + chipH};
                 d->chipViewportW = stripRight - left;
                 d->chipHitRects.clear();
@@ -10246,8 +10617,10 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     // label since there is no visible text. Geometry comes from
                     // the tested showext:: switch model; the control keeps a
                     // STABLE size as the state flips.
-                    const wchar_t* toggleAccName = showext::AccessibleName();
-                    (void)toggleAccName;  // tooltip / UIA label (live Win32 build)
+                    // fix thse isseue.md P2 (10249-10250): the accessible name
+                    // is no longer computed-and-discarded here -- it is wired to
+                    // a real tooltip by EnsureExtToggleTip()/SyncExtToggleTip()
+                    // (state-aware showext::AccessibleLabel()).
                     const RECT tr2 = d->chipToggleRect;
                     const bool on = d->showExt;
                     const int trackH = tr2.bottom - tr2.top;
@@ -10342,15 +10715,30 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const bool gridMode = viewmode::IsGrid(vmode);
                 const int gridGutter =
                     S(listscroll::kScrollbarW) + S(listscroll::kMetaScrollGap);
+                // fix thse isseue.md P1 (DPI unit mismatch): viewmode::Columns /
+                // SelectedGridVisibleRows divide by LOGICAL (96-dpi) CellW/CellH,
+                // so the DEVICE-pixel viewport width/height must be converted
+                // back to logical units FIRST -- the same MulDiv(.,96,dpi)
+                // contract ComputeEffectiveLayout uses. Feeding device pixels to
+                // logical-cell helpers over-counted columns/rows above 100% DPI.
+                const int availWLogical = gridMode
+                    ? MulDiv((right - left) - gridGutter, 96, static_cast<int>(dpi))
+                    : 0;
                 const int selCols = gridMode
-                    ? viewmode::Columns(vmode, (right - left) - gridGutter)
+                    ? viewmode::Columns(vmode, availWLogical)
                     : 1;
                 d->selGridCols = selCols;
-                const int rowsViewportH = rc.bottom - rowsTop;
+                const int rowsViewportH = rc.bottom - rowsTop;   // DEVICE px
+                // fix thse isseue.md P1: cache the REAL item-row viewport (below
+                // the header / chip strip / divider) in list client coords so the
+                // modal-loop wheel router scrolls rows ONLY when the pointer is
+                // actually over the rows -- not the title, chips or toggle.
+                d->listRowsRect = RECT{left, rowsTop, right, rc.bottom};
                 const int capRowH = gridMode ? S(viewmode::CellH(vmode)) : rowH;
                 const int visRows = gridMode
                     ? viewmode::SelectedGridVisibleRows(
-                          vmode, itemCount, selCols, rowsViewportH)
+                          vmode, itemCount, selCols,
+                          MulDiv(rowsViewportH, 96, static_cast<int>(dpi)))
                     : listscroll::EffectiveVisibleRowsResizable(
                           mode::VisibleRows(lm), rowsViewportH, capRowH,
                           (d->manualSized || IsZoomed(hwnd)));   // fix thse isseue.md v0.12.69 #2: a maximized/resized List fills the viewport (no 4/9-row dead space); preferred keeps its cap
@@ -11584,6 +11972,13 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (d) {
                 ApplyPromptLayout(hwnd, d);
                 RefreshGroupPanel(d);
+                // fix thse isseue.md add-on section 5: the Navigation Help card
+                // is a SEPARATE top-level window, so ApplyPromptLayout above does
+                // not touch it. If it is open, re-measure + re-anchor it at the
+                // NEW DPI (MeasureHelpCard/PositionHelpCard both read d->dpi), so
+                // its fonts, padding, scrollbar geometry and position all follow
+                // the monitor change instead of keeping old-DPI metrics.
+                if (d->helpVis) PositionHelpCard(hwnd, d);
                 // fix thse isseue.md P0 #3: the title band is DPI-scaled, so the
                 // DWM custom-frame extension must be re-applied at the NEW DPI or
                 // the transparent extended region drifts out of sync with the
@@ -11856,6 +12251,28 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
            data.acrylicActive ? 1 : 0,
            paintMode == paintmode::PaintMode::DwmTitleBand ? L"DwmTitleBand"
                                                            : L"SolidTheme");
+
+    // fix thse isseue.md P0 (initial-layout lifecycle): run ONE authoritative
+    // layout pass BEFORE the first visible frame, via the SAME
+    // ComputeEffectiveLayout + ApplyPromptLayout path a later resize uses. The
+    // children were created (WM_CREATE) at the PREFERRED ComputePromptLayout
+    // coordinates, which -- for a GRID Selected view -- omit the grid-cell
+    // sizing + section shift the effective layout applies, so the old first
+    // frame was misaligned until the user resized. Doing it here, while the
+    // window is still hidden (winStyle has no WS_VISIBLE; ShowWindow is below),
+    // fixes the geometry with NO flash and NO reliance on a manual resize. The
+    // window is already sized (CreateWindowExW + ApplyRememberedNormalPlacement)
+    // so GetClientRect is valid. This is a guarded ONE-TIME pass in the creation
+    // sequence (never a message loop); ApplyPromptLayout skips the top-level
+    // resize once manualSized/zoomed, so a remembered/maximized state is not
+    // disturbed and no resize/relayout loop can start.
+    if (data.isGroup) {
+        RECT rcInit{};
+        GetClientRect(hwnd, &rcInit);
+        if ((rcInit.right - rcInit.left) > 0 && (rcInit.bottom - rcInit.top) > 0) {
+            ApplyPromptLayout(hwnd, &data);
+        }
+    }
 
     ShowWindow(hwnd, SW_SHOW);
     // fix thse isseue.md Issue 6: if the last session state was maximized, open
@@ -12281,9 +12698,17 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
             // own Left/Right caret movement and dialog Enter/Esc are untouched. -
             {
                 const HWND cfw = GetFocus();
-                const bool chipKeys = !(cfw == data.edit ||
-                    cfw == data.createBtn || cfw == data.cancelBtn ||
-                    cfw == data.segCopyBtn || cfw == data.segMoveBtn);
+                // fix thse isseue.md P1: ONE focus classification (focusroute)
+                // for chip + list nav keys. Chips react ONLY when no interactive
+                // control owns focus -- now including destCopyBtn, autoGroupBtn,
+                // infoBtn, sizeToggle, minBtn and closeBtn (previously omitted).
+                const bool chipKeys = focusroute::NavKeysDriveChipsOrList(
+                    focusroute::IsInteractiveFocus(
+                        cfw == data.edit, cfw == data.createBtn, cfw == data.cancelBtn,
+                        cfw == data.segCopyBtn, cfw == data.segMoveBtn,
+                        cfw == data.destCopyBtn, cfw == data.autoGroupBtn,
+                        cfw == data.infoBtn, cfw == data.sizeToggle,
+                        cfw == data.minBtn, cfw == data.closeBtn));
                 const int chipCount = static_cast<int>(data.chipHitRects.size());
                 if (msg.message == WM_KEYDOWN && chipKeys && chipCount > 0 &&
                     (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)) {
@@ -12320,15 +12745,19 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 }
             }
             if (msg.message == WM_MOUSEWHEEL) {
-                POINT pt = {
-                    static_cast<LONG>(static_cast<short>(LOWORD(msg.lParam))),
-                    static_cast<LONG>(static_cast<short>(HIWORD(msg.lParam)))};
-                RECT lr = {0};
-                GetWindowRect(data.groupInfo, &lr);  // WM_MOUSEWHEEL pt is screen-space
-                const bool overList = PtInRect(&lr, pt) != FALSE;
-                if (!listscroll::WheelScrollsList(overList)) {
-                    // Cursor is not over the list -- let the wheel fall through
-                    // (do not scroll the list from a hover on another control).
+                // fix thse isseue.md P1: route the wheel by the REAL item-row
+                // viewport the painter cached (data.listRowsRect), NOT the whole
+                // Selected Items control. Ctrl+wheel (zoom) and a chip-strip pan
+                // were already consumed above; here the tested
+                // viewmode::WheelScrollsRows is authoritative, so a wheel over
+                // the title / chip strip / toggle never scrolls the rows and each
+                // wheel event is handled exactly once.
+                const bool overRows =
+                    PtInRect(&data.listRowsRect, clientPt) != FALSE;
+                if (!viewmode::WheelScrollsRows(/*ctrlDown*/false, overChipStrip,
+                                                overRows, /*horizontal*/false)) {
+                    // Not over the item-row viewport -- let the wheel fall
+                    // through (do not scroll the rows from a hover elsewhere).
                     if (!IsDialogMessageW(hwnd, &msg)) {
                         TranslateMessage(&msg);
                         DispatchMessageW(&msg);
@@ -12352,10 +12781,17 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 continue;
             }
             const HWND fw = GetFocus();
-            const bool keysToList = listscroll::KeysScrollList(
-                fw == data.edit,
-                fw == data.createBtn || fw == data.cancelBtn,
-                fw == data.segCopyBtn || fw == data.segMoveBtn);
+            // fix thse isseue.md P1: list Up/Down/Home/End/PageUp/PageDown use
+            // the SAME centralized focus classification as the chip keys -- the
+            // list scrolls ONLY when no interactive control owns focus (now
+            // including destCopyBtn/autoGroupBtn/infoBtn/sizeToggle/minBtn/closeBtn).
+            const bool keysToList = focusroute::NavKeysDriveChipsOrList(
+                focusroute::IsInteractiveFocus(
+                    fw == data.edit, fw == data.createBtn, fw == data.cancelBtn,
+                    fw == data.segCopyBtn, fw == data.segMoveBtn,
+                    fw == data.destCopyBtn, fw == data.autoGroupBtn,
+                    fw == data.infoBtn, fw == data.sizeToggle,
+                    fw == data.minBtn, fw == data.closeBtn));
             if (msg.message == WM_KEYDOWN && keysToList) {
                 bool nav = true;
                 listscroll::Key k = listscroll::Key::Up;
@@ -13443,6 +13879,14 @@ static GroupDestChoiceM ResolveGroupDestination(const std::wstring& fixedDest,
     return out;  // invalid
 }
 
+// Mirror of group_logic.h GroupDestinationUsable (fix thse isseue.md P1): a
+// resolved/desired destination may be used ONLY when nothing occupies it (it
+// will be created) OR what occupies it is a directory. A plain file there is a
+// hard error that must abort BEFORE any filesystem side effect.
+static bool GroupDestinationUsable(bool destExists, bool destIsDirectory) {
+    return !destExists || destIsDirectory;
+}
+
 // Folder-exists collision policy (0=UseExisting, 1=Numbered, 2=Cancel), mirrors
 // GroupCollisionResolve. Numbered makes "<name> 2", "<name> 3", ... siblings.
 static GroupTargetResolutionM ResolveGroupTargetFolder(const std::wstring& dir,
@@ -13456,6 +13900,15 @@ static GroupTargetResolutionM ResolveGroupTargetFolder(const std::wstring& dir,
         return out;
     }
     if (policy == 0) {  // UseExisting
+        // A file (not a directory) occupies the destination name: it cannot be
+        // reused as a group folder. Cancel so the caller reports a clear error
+        // instead of treating a file as a reusable target (fix thse isseue.md
+        // P1 / 13448-13475). full is known to exist here, so test its type.
+        if (!GroupDestinationUsable(true, PathIsDirectoryW(full.c_str()) != FALSE)) {
+            out.kind = GroupResolveKind::Cancel;
+            out.path.clear();
+            return out;
+        }
         out.kind = GroupResolveKind::UseExisting;
         out.path = full;
         return out;
@@ -13477,28 +13930,36 @@ static GroupTargetResolutionM ResolveGroupTargetFolder(const std::wstring& dir,
 static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
                                   const std::wstring& destFolder,
                                   bool isMove,
-                                  HWND owner) {
+                                  HWND owner,
+                                  groupresult::GroupResultSummary* outSummary = nullptr) {
+    // Honest result accounting (fix thse isseue.md 13565-13620 / 14299-14320):
+    // default to "nothing grouped" so every early validation return leaves the
+    // caller with a truthful (non-inflated) summary. The main path overwrites
+    // this with the real tallies.
+    if (outSummary) *outSummary = groupresult::GroupResultSummary{};
     if (items.empty() || destFolder.empty()) {
         return false;
     }
 
-    // Create the destination folder if needed (reuse the existing New Folder
-    // shell-create path). Collision default: an already-existing folder is
-    // reused, not overwritten.
-    if (!PathFileExistsW(destFolder.c_str())) {
-        if (!CreateFolderWithShellElevation(destFolder, owner)) {
-            Wh_Log(L"Group: failed to create destination '%ls'", destFolder.c_str());
-            return false;
-        }
-    }
+    // Validate BEFORE any filesystem side effect so a rejected op never leaves
+    // an empty destination directory behind (fix thse isseue.md P1 /
+    // 13485-13511). Order: destination-type, then self/descendant, then create.
 
-    // Re-validate immediately before the operation.
-    if (!PathFileExistsW(destFolder.c_str())) {
-        Wh_Log(L"Group: destination vanished before op '%ls'", destFolder.c_str());
+    // (1) Destination-type: if something already occupies the destination path
+    //     it MUST be a directory. A plain file there is a hard error -- never
+    //     delete it or copy into it. Mirrors group_logic.h GroupDestinationUsable.
+    const bool destExists = PathFileExistsW(destFolder.c_str()) != FALSE;
+    if (!GroupDestinationUsable(destExists,
+                                PathIsDirectoryW(destFolder.c_str()) != FALSE)) {
+        Wh_Log(L"Group: destination '%ls' is a file, not a folder -- aborting",
+               destFolder.c_str());
         return false;
     }
+
+    // (2) Self/descendant: never move/copy a selected folder into itself or one
+    //     of its own descendants. Done here -- before the destination is created
+    //     -- mirroring ValidateGroup's ordering.
     for (const auto& it : items) {
-        // Never move/copy a folder into itself or one of its own descendants.
         std::wstring a = it.path;
         std::wstring c = destFolder;
         // simple same-or-descendant check (case-insensitive prefix at a boundary)
@@ -13509,6 +13970,24 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
                    a.c_str(), c.c_str());
             return false;
         }
+    }
+
+    // (3) Only now create the destination folder if it does not yet exist
+    //     (reuse the existing New Folder shell-create path). Collision default:
+    //     an already-existing folder is reused, not overwritten.
+    if (!destExists) {
+        if (!CreateFolderWithShellElevation(destFolder, owner)) {
+            Wh_Log(L"Group: failed to create destination '%ls'", destFolder.c_str());
+            return false;
+        }
+    }
+
+    // Re-validate immediately before the operation: the destination must now
+    // exist AND be a directory (a create could race, or a file could appear).
+    if (!PathIsDirectoryW(destFolder.c_str())) {
+        Wh_Log(L"Group: destination not a usable folder before op '%ls'",
+               destFolder.c_str());
+        return false;
     }
 
     IShellItem* destItem = nullptr;
@@ -13557,10 +14036,13 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
         (policyFlags & ~(kGroupSkipExistingBit | kGroupCompareBit));
     fileOp->SetOperationFlags(shellFlags);
 
+    int requested = 0;      // non-virtual, non-empty items we actually consider
     int queued = 0;
     int skipped = 0;
+    int failedToQueue = 0;  // could not build a shell item, or Move/Copy failed
     for (const auto& it : items) {
         if (it.isVirtual || it.path.empty()) continue;  // safety - already filtered upstream
+        ++requested;  // this item is in scope; it lands in exactly one bucket below
 
         // Skip policy: if a file/folder with this leaf name already exists in
         // the destination, keep the existing one and drop the incoming item.
@@ -13580,12 +14062,13 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
         IShellItem* srcItem = nullptr;
         if (FAILED(SHCreateItemFromParsingName(it.path.c_str(), nullptr,
                                                IID_PPV_ARGS(&srcItem))) || !srcItem) {
+            ++failedToQueue;  // could not reference the source -- NOT grouped
             continue;
         }
         HRESULT op = isMove
             ? fileOp->MoveItem(srcItem, destItem, nullptr, nullptr)
             : fileOp->CopyItem(srcItem, destItem, nullptr, nullptr);
-        if (SUCCEEDED(op)) ++queued;
+        if (SUCCEEDED(op)) ++queued; else ++failedToQueue;
         SafeRelease(srcItem);
     }
     if (skipped > 0) {
@@ -13594,6 +14077,8 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
     }
 
     bool ok = false;
+    bool performed = false;
+    BOOL aborted = FALSE;
     if (queued > 0) {
         // The shell's native "Replace or Skip Files" box (shown for Ask and
         // Compare) is modal to `owner`. If Explorer is not in the foreground
@@ -13606,14 +14091,27 @@ static bool PerformGroupOperation(const std::vector<CapturedItem>& items,
             ForceForeground(owner);
         }
         hr = fileOp->PerformOperations();
-        BOOL aborted = FALSE;
         fileOp->GetAnyOperationsAborted(&aborted);
-        ok = SUCCEEDED(hr) && !aborted;
+        performed = SUCCEEDED(hr);
+        ok = performed && !aborted;
         Wh_Log(L"Group: %s %d item(s) into '%ls' hr=0x%08X aborted=%d",
                isMove ? L"moved" : L"copied", queued, destFolder.c_str(), hr, aborted);
     } else {
         Wh_Log(L"Group: no items queued for operation");
     }
+
+    // Fold the raw tallies into an HONEST summary (fix thse isseue.md
+    // 13565-13620 / 14299-14320) so the caller reports the count that ACTUALLY
+    // landed -- requested == queued + skipped + failedToQueue, and grouped
+    // never exceeds queued.
+    groupresult::GroupOpOutcome outcome;
+    outcome.requested = requested;
+    outcome.skipped = skipped;
+    outcome.failedToQueue = failedToQueue;
+    outcome.queued = queued;
+    outcome.performed = performed;
+    outcome.aborted = (aborted != FALSE);
+    if (outSummary) *outSummary = groupresult::ClassifyGroupResult(outcome);
 
     SafeRelease(fileOp);
     SafeRelease(destItem);
@@ -13720,19 +14218,28 @@ static bool PerformAutoGroupOperation(const std::vector<CapturedItem>& items,
     // batch) and reuses the directory created above; a bucket blocked by a file
     // is skipped. The Copy/Move choice and the file-collision policy are the
     // same as a normal Ctrl+G group.
+    // fix thse isseue.md P2 (13636-13750): build the file -> bucket assignment
+    // in ONE pass instead of rescanning plan.files for every bucket (the old
+    // O(buckets x files) loop). Key by the normalized dir (autogroupbucket::
+    // NormalizeDirKey, mirrored + unit-tested) so each file lands in the same
+    // bucket a PathEqualCI filter would have matched.
+    std::unordered_map<std::wstring, std::vector<CapturedItem>> bucketMap;
+    bucketMap.reserve(plan.dirsToCreate.size() * 2);
+    for (const auto& f : plan.files) {
+        CapturedItem ci;
+        ci.path = f.src;
+        ci.isFolder = false;
+        bucketMap[autogroupbucket::NormalizeDirKey(f.destDir)].push_back(ci);
+    }
+
     int bucketsRun = 0, filesRouted = 0;
     for (const auto& dir : plan.dirsToCreate) {
         if (dirBlocked(dir)) continue;
-        std::vector<CapturedItem> bucketItems;
-        for (const auto& f : plan.files) {
-            if (autogroup::PathEqualCI(f.destDir, dir)) {
-                CapturedItem ci;
-                ci.path = f.src;
-                ci.isFolder = false;
-                bucketItems.push_back(ci);
-            }
+        auto it = bucketMap.find(autogroupbucket::NormalizeDirKey(dir));
+        if (it == bucketMap.end() || it->second.empty()) {
+            continue;  // a parent-only dir (e.g. Images) -- no files routed here
         }
-        if (bucketItems.empty()) continue;  // a parent-only dir (e.g. Images)
+        const std::vector<CapturedItem>& bucketItems = it->second;
         ++bucketsRun;
         filesRouted += static_cast<int>(bucketItems.size());
         if (!PerformGroupOperation(bucketItems, dir, isMove, owner)) {
@@ -14311,19 +14818,38 @@ static DWORD WINAPI WorkerThread(void* pParameter) {
                     destFolder = choice.wholePath;
                 }
 
-                const bool opOk =
-                    PerformGroupOperation(sel, destFolder, isMove, groupOrigin);
-                if (opOk) {
-                    g_lastGroupTarget = destFolder;  // remember for blank-name reuse
-                    Wh_Log(L"Ctrl+G: grouped %zu item(s) %ls -> '%ls'",
-                           sel.size(), isMove ? L"(move)" : L"(copy)",
+                // fix thse isseue.md #5: report the HONEST grouped count, not
+                // the raw selection size. PerformGroupOperation fills `summary`
+                // with how many items actually landed (grouped), how many were
+                // skipped (collision) and how many failed to queue.
+                groupresult::GroupResultSummary summary;
+                PerformGroupOperation(sel, destFolder, isMove, groupOrigin, &summary);
+                const bool anyGrouped = summary.grouped > 0;
+                if (summary.kind == groupresult::GroupResultKind::Complete) {
+                    Wh_Log(L"Ctrl+G: grouped %d item(s) %ls -> '%ls'",
+                           summary.grouped, isMove ? L"(move)" : L"(copy)",
                            destFolder.c_str());
+                } else if (summary.kind == groupresult::GroupResultKind::Partial) {
+                    // Partial: say how many of the selection actually landed and
+                    // why the rest did not. On abort the count is an upper bound
+                    // ("up to N"); never claim the full selection size.
+                    Wh_Log(L"Ctrl+G: grouped %s%d of %d item(s) %ls -> '%ls' "
+                           L"(%d skipped, %d failed%s)",
+                           summary.groupedExact ? L"" : L"up to ",
+                           summary.grouped, summary.requested,
+                           isMove ? L"(move)" : L"(copy)", destFolder.c_str(),
+                           summary.skipped, summary.failed,
+                           summary.groupedExact ? L"" : L", aborted");
+                } else {
+                    Wh_Log(L"Ctrl+G: group operation did not complete "
+                           L"(%d requested, 0 grouped)", summary.requested);
+                }
+                if (anyGrouped) {
+                    g_lastGroupTarget = destFolder;  // remember for blank-name reuse
                     // "Open destination after grouping" (off by default).
                     if (AtomicGet(&g_groupOpenAfter) != 0) {
                         NavigateActiveTabToFolder(groupOrigin, nullptr, destFolder);
                     }
-                } else {
-                    Wh_Log(L"Ctrl+G: group operation did not complete");
                 }
                 // fix thse isseue.md #1: the operation result was logged above; the popup already closed, so nothing more to post.
                 // sel / parent go out of scope here -> capture is single-use.
