@@ -2,7 +2,7 @@
 // @id              ctrlg-group
 // @name            Ctrl+G to Group Folder/Files
 // @description     Ctrl+G makes Folder/Files
-// @version         0.12.65
+// @version         0.12.69
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -3053,26 +3053,55 @@ inline PromptLayout ComputePromptLayout(bool isGroup, bool expanded = false,
 // additionally shifts the Auto Group add-on button, which the test struct omits).
 inline PromptLayout ReflowToClient(const PromptLayout& base,
                                    int clientW, int clientH,
-                                   int minW, int minH) {
+                                   int minW, int minH,
+                                   int selRowH = kSelRowH,
+                                   int selCapRowsOverride = -1) {
     PromptLayout L = base;
     if (!base.isGroup) return L;              // New Folder keeps its fixed form
     if (clientW < minW) clientW = minW;
     if (clientH < minH) clientH = minH;
+    // fix thse isseue.md Phase 2: the Selected-Items row height is MODE-AWARE.
+    // List passes the 24px list row (the default); a GRID view (Large / Extra
+    // large) passes its WHOLE cell height (viewmode::CellH) so the reflow floor
+    // and the row-cap math below reserve a complete cell -- never a 24px row
+    // that clips the icon/filename.
+    if (selRowH <= 0) selRowH = kSelRowH;
 
     const int dx = clientW - base.windowW;    // extra width to distribute
     int dy = clientH - base.windowH;          // extra height to distribute
     // Never shrink the Selected Items card below a readable floor: keep the
     // footer reachable rather than letting the lower cards overlap it.
-    const int kMinSelReflowH = 40;
+    // v0.12.68 #3: derive the Selected Items reflow FLOOR from its ACTUAL header
+    // geometry plus one complete list row, NOT a magic 40px -- so a shrink keeps
+    // the header and at least one whole row visible and the lower cards + footer
+    // reachable (no overlap). Grid modes reserve their taller whole cell upstream.
+    const int selHeaderBlockH = base.selectedList.y - base.selectedContent.y;
+    const int kMinSelReflowH = selHeaderBlockH + selRowH;
     if (base.selectedContent.h + dy < kMinSelReflowH)
         dy = kMinSelReflowH - base.selectedContent.h;
+
+    // fix thse isseue.md Issue 4: do NOT pour ALL the extra height into the
+    // Selected Items card. Only a selection that was ROW-CAPPED in the preferred
+    // layout (more items than its viewport shows) uses the extra height (and then
+    // scrolls, issue 9/10); a small selection that already shows every row keeps
+    // its content height, so a maximized/zoomed popup no longer leaves a big
+    // blank band below the last row and the lower sections keep their natural
+    // spacing. Shrink (dy < 0) is unchanged so the readable floor above still
+    // holds. selGrow is what the card grows by (and what the lower cards shift).
+    const int baseVisRows = (selRowH > 0) ? base.selectedList.h / selRowH : 0;
+    const int selCapRows  = (selCapRowsOverride >= 0)
+                                ? selCapRowsOverride
+                                : (base.expanded ? kListExpandedRows : kListCompactRows);
+    const bool selRowCapped = baseVisRows >= selCapRows;
+    int selGrow = dy;
+    if (dy > 0 && !selRowCapped) selGrow = 0;
 
     L.windowW = clientW;
     L.windowH = clientH;
 
     const auto widen  = [dx](Rect& r) { if (r.w > 0) r.w += dx; };
     const auto moveX  = [dx](Rect& r) { if (r.w > 0) r.x += dx; };
-    const auto shiftY = [dy](Rect& r) { if (r.w > 0) r.y += dy; };
+    const auto shiftY = [selGrow](Rect& r) { if (r.w > 0) r.y += selGrow; };
 
     // Stretch the full-width cards / fields / descriptions to the client width.
     widen(L.selectedCard);  widen(L.selectedHeader); widen(L.selectedList);
@@ -3096,17 +3125,17 @@ inline PromptLayout ReflowToClient(const PromptLayout& base,
         const int segLeft   = base.segCopy.x;                     // card inner-left inset
         const int newInnerW = (base.segMove.right() - segLeft) + dx;
         const int newHalf   = newInnerW / 2;
-        L.segCopy.x = segLeft;             L.segCopy.w = newHalf;              L.segCopy.y += dy;
-        L.segMove.x = segLeft + newHalf;   L.segMove.w = newInnerW - newHalf;  L.segMove.y += dy;
-        L.opToggle.x = segLeft;            L.opToggle.y += dy;
+        L.segCopy.x = segLeft;             L.segCopy.w = newHalf;              L.segCopy.y += selGrow;
+        L.segMove.x = segLeft + newHalf;   L.segMove.w = newInnerW - newHalf;  L.segMove.y += selGrow;
+        L.opToggle.x = segLeft;            L.opToggle.y += selGrow;
     }
 
-    // The Selected Items card absorbs the extra height; everything below it
-    // shifts down by the same amount so the footer tracks the client bottom.
-    L.selectedCard.h    += dy;
-    L.selectedList.h    += dy;
-    L.selectedContent.h += dy;
-    L.groupHeader.h     += dy;
+    // The Selected Items card absorbs the (content-capped) extra height; every
+    // section below it shifts down by the SAME amount so spacing stays uniform.
+    L.selectedCard.h    += selGrow;
+    L.selectedList.h    += selGrow;
+    L.selectedContent.h += selGrow;
+    L.groupHeader.h     += selGrow;
     shiftY(L.destCard); shiftY(L.destLabel); shiftY(L.destDesc);
     shiftY(L.destField); shiftY(L.destCopyBtn);
     shiftY(L.nameCard); shiftY(L.nameLabel); shiftY(L.nameDesc); shiftY(L.nameField);
@@ -3115,6 +3144,36 @@ inline PromptLayout ReflowToClient(const PromptLayout& base,
     shiftY(L.createButton); shiftY(L.cancelButton); shiftY(L.autoGroupButton);
     shiftY(L.infoButton);   // UI-03: left-anchored, so it only tracks the footer DOWN
     return L;
+}
+
+// fix thse isseue.md Phase 4: which repaint a Ctrl+wheel view-mode switch needs.
+// A switch only changes the Selected Items VIEWPORT content (grid vs list). If
+// every section OUTSIDE that card -- the window size and the destination,
+// folder-name, action and footer rects -- is geometrically identical between
+// the OLD and NEW effective layouts, nothing around the card moved, so repaint
+// JUST the Selected Items viewport (no child reposition, no full-window erase ->
+// no title-bar / card / footer flash). Otherwise a section genuinely moved
+// (e.g. a preferred popup must resize for a taller mode) and ONE atomic relayout
+// is required. Comparing the two computed layouts keeps this robust across every
+// window state instead of guessing from flags.
+enum class ViewSwitchRepaint { SelectedOnly, FullRelayout };
+
+inline bool SectionsUnchanged(const PromptLayout& a, const PromptLayout& b) {
+    const auto eq = [](const Rect& p, const Rect& q) {
+        return p.x == q.x && p.y == q.y && p.w == q.w && p.h == q.h;
+    };
+    return a.windowW == b.windowW && a.windowH == b.windowH &&
+           eq(a.destCard, b.destCard)         && eq(a.destField, b.destField)     &&
+           eq(a.nameCard, b.nameCard)         && eq(a.nameField, b.nameField)     &&
+           eq(a.actionCard, b.actionCard)     && eq(a.keyboardHint, b.keyboardHint) &&
+           eq(a.segCopy, b.segCopy)           && eq(a.segMove, b.segMove)         &&
+           eq(a.createButton, b.createButton) && eq(a.cancelButton, b.cancelButton);
+}
+
+inline ViewSwitchRepaint ViewSwitchRepaintFor(const PromptLayout& oldL,
+                                              const PromptLayout& newL) {
+    return SectionsUnchanged(oldL, newL) ? ViewSwitchRepaint::SelectedOnly
+                                         : ViewSwitchRepaint::FullRelayout;
 }
 
 }  // namespace layout
@@ -3260,6 +3319,7 @@ struct Item {
     std::wstring name;
     bool isFolder = false;
     long long sizeBytes = -1;
+    std::wstring path;   // fix thse isseue.md Issue 2: full filesystem path (empty for virtual items), used only for image-thumbnail extraction in grid views
 };
 
 inline size_t FileCount(const std::vector<Item>& items) {
@@ -3607,6 +3667,22 @@ inline bool ScrollsListOnWheel(bool ctrlDown, bool shiftDown) {
     return !ctrlDown && !shiftDown;
 }
 
+// fix thse isseue.md Issue 5: LOCATION-aware wheel routing (byte-for-byte mirror
+// of view_mode_logic.h). A PLAIN wheel over the chip strip pans WITHOUT Shift;
+// Ctrl keeps zoom priority; at most ONE of {zoom, pan, scroll} per event.
+inline bool WheelZooms(bool ctrlDown, bool horizontal) {
+    return ctrlDown && !horizontal;
+}
+inline bool WheelPansChips(bool ctrlDown, bool overStrip, bool horizontal) {
+    return !WheelZooms(ctrlDown, horizontal) && overStrip;
+}
+inline bool WheelScrollsRows(bool ctrlDown, bool overStrip, bool overRows,
+                             bool horizontal) {
+    if (WheelZooms(ctrlDown, horizontal)) return false;
+    if (overStrip) return false;
+    return overRows && !horizontal;
+}
+
 inline bool IsGrid(Mode m) { return m != Mode::List; }
 
 inline int IconPx(Mode m) {
@@ -3661,6 +3737,24 @@ inline int ContentHeight(Mode m, int itemCount, int availW) {
     return GridRows(itemCount, cols) * CellH(m);
 }
 
+// fix thse isseue.md v0.12.67 (Issue #1 B): how many GRID rows the Selected
+// viewport should show for `itemCount` items at `cols` columns, given a
+// vertical pixel budget. Whole cells only (never a clipped row), always at
+// least one row, and never more rows than the items actually need -- so a small
+// selection content-sizes (no dead space) while a large one is capped to the
+// budget and the remainder scrolls. List mode returns 0 (it is not a grid).
+inline int SelectedGridVisibleRows(Mode m, int itemCount, int cols,
+                                   int budgetPx) {
+    if (!IsGrid(m)) return 0;
+    const int ch = CellH(m);
+    if (ch <= 0) return 0;
+    int fit = budgetPx / ch;          // whole cells only -> no clipped row
+    if (fit < 1) fit = 1;             // always at least one row visible
+    const int need = GridRows(itemCount, cols);
+    const int want = need < 1 ? 1 : need;
+    return want < fit ? want : fit;
+}
+
 inline int FirstVisibleItem(Mode oldMode, int topRow, int oldCols) {
     if (oldMode == Mode::List) return topRow;
     return topRow * (oldCols < 1 ? 1 : oldCols);
@@ -3671,6 +3765,33 @@ inline int TopRowForItem(Mode newMode, int itemIndex, int newCols) {
     const int c = newCols < 1 ? 1 : newCols;
     return itemIndex / c;
 }
+
+// fix thse isseue.md v0.12.68: minimum WHOLE-cell height for a mode -- one grid
+// cell for the icon grids, one list row for List. Used to reserve space for at
+// least one complete cell (never a blank grid) and to derive the Selected-Items
+// minimum content height instead of a fixed pixel floor. Keep in lockstep with
+// tests/view_mode_logic.h.
+inline int MinCellH(Mode m) { return IsGrid(m) ? CellH(m) : RowHeight(m); }
+
+// The LARGEST view mode whose one whole cell fits in `availRowsH` px of rows
+// viewport. Falls back to List (which always shows at least one short row), so
+// a too-small window degrades gracefully to a mode that can still show a cell
+// rather than painting nothing. Order: Extra large > Large > List.
+inline Mode LargestModeThatFits(int availRowsH) {
+    if (availRowsH >= CellH(Mode::ExtraLarge)) return Mode::ExtraLarge;
+    if (availRowsH >= CellH(Mode::Large))      return Mode::Large;
+    return Mode::List;
+}
+
+// Minimum Selected-Items CONTENT height for a mode: the header block plus ONE
+// whole cell/row. Replaces the old fixed 40px reflow floor so the lower cards
+// and footer are never overlapped by a half-painted cell.
+inline int MinSelectedContentH(Mode m, int headerBlockH) {
+    return headerBlockH + MinCellH(m);
+}
+
+// Overlap guard: does one whole cell/row of this mode fit in `availRowsH` px?
+inline bool CellFits(Mode m, int availRowsH) { return MinCellH(m) <= availRowsH; }
 
 }  // namespace viewmode
 
@@ -4346,6 +4467,21 @@ inline int EffectiveVisibleRows(int declaredCap, int viewportH, int rowH) {
     if (phys <= 0) return declaredCap;
     return phys < declaredCap ? phys : declaredCap;
 }
+
+// fix thse isseue.md v0.12.69 spec section 2 (P0 dead space): when the popup is
+// USER-SIZED (maximized or manually resized), the List viewport should show as
+// many WHOLE rows as PHYSICALLY FIT -- filling the enlarged Selected Items card
+// instead of leaving a blank tail below the compact 4-row / expanded 9-row cap.
+// When NOT user-sized this is byte-identical to EffectiveVisibleRows (the
+// declared compact/expanded cap is preserved). An unmeasured viewport (height
+// or rowH 0) still falls back to the declared cap so the list never collapses.
+inline int EffectiveVisibleRowsResizable(int declaredCap, int viewportH,
+                                         int rowH, bool userSized) {
+    const int phys = VisibleRows(viewportH, rowH);
+    if (phys <= 0) return declaredCap;        // not yet measurable
+    if (userSized) return phys;               // fill the enlarged viewport (no cap)
+    return phys < declaredCap ? phys : declaredCap;
+}
 inline int MaxTopRow(int itemCount, int visibleRows) {
     int m = itemCount - visibleRows;
     return m > 0 ? m : 0;
@@ -4478,38 +4614,114 @@ inline bool HitTestX(int px, int gutterLeft, int gutterRight, int hitSlop) {
 // button + lightweight help popup are wired to THESE functions.
 namespace infohelp {
 
-inline const wchar_t* AccessibleName() { return L"Keyboard and navigation help"; }
+inline const wchar_t* AccessibleName() { return L"Navigation help"; }
 
-inline int LineCount() { return 5; }
+inline const wchar_t* Heading() { return L"Navigation help"; }
+
+// "Overflow and Scrollable Help Card": the card now renders the FULL navigation
+// help (NAVIGATE ITEMS + New Folder + Group Creation + Auto Grouping) as single
+// short lines; each line's Kind drives section/divider/body typography while the
+// "Navigation help" heading stays fixed and the body scrolls on overflow. Keep
+// in lockstep with tests/info_help_logic.h.
+enum class Kind { Section, Body, Divider };
+struct HelpLine { const wchar_t* text; Kind kind; };
+inline const HelpLine* Lines(int* count) {
+    static const HelpLine kLines[] = {
+        { L"NAVIGATE ITEMS",                                              Kind::Section },
+        { L"**Mouse wheel**: scroll the selected items",                  Kind::Body },
+        { L"**Shift + Wheel**: scroll the summary chips",                 Kind::Body },
+        { L"**Ctrl + Wheel**: List / Large / Extra large icons",          Kind::Body },
+        { L"Copy / Move: click, or **Left** / **Right** when focused",    Kind::Body },
+        { L"**Tab**: move focus   **Enter**: activate   **Esc**: cancel", Kind::Body },
+        { L"",                                                            Kind::Divider },
+        { L"NEW FOLDER - Ctrl + F + N",                                   Kind::Section },
+        { L"**Single folder**: type a name, then confirm",                Kind::Body },
+        { L"**Batch**: type a count after the shortcut (e.g. `9`)",       Kind::Body },
+        { L"**Templates**: press an assigned template key",               Kind::Body },
+        { L"",                                                            Kind::Divider },
+        { L"GROUP CREATION - Ctrl + G",                                   Kind::Section },
+        { L"**Group**: name the destination, pick Copy or Move",          Kind::Body },
+        { L"**Copy** keeps the originals; **Move** relocates them",       Kind::Body },
+        { L"**Ctrl + G then C / M**: direct to the last destination",     Kind::Body },
+        { L"",                                                            Kind::Divider },
+        { L"AUTO GROUPING",                                               Kind::Section },
+        { L"**Auto Group**: fold files into folders by extension",        Kind::Body },
+        { L"_Wait for the 8-second countdown, then confirm_",             Kind::Body },
+        { L"Layout: **Flat** or **Images parent**, plus custom rules",    Kind::Body },
+    };
+    if (count) *count = static_cast<int>(sizeof(kLines) / sizeof(kLines[0]));
+    return kLines;
+}
+inline int LineCount() { int n = 0; Lines(&n); return n; }
 inline const wchar_t* Line(int i) {
-    switch (i) {
-        case 0: return L"Mouse wheel: scroll the selected items";
-        case 1: return L"Shift + Wheel: scroll the summary chips";
-        case 2: return L"Ctrl + Wheel: List / Large / Extra large icons";
-        case 3: return L"Copy / Move: click, or Left / Right when focused";
-        case 4: return L"Tab: move focus   Enter: activate   Esc: cancel";
+    int n = 0; const HelpLine* ls = Lines(&n);
+    if (i < 0 || i >= n) return L"";
+    return ls[i].text;
+}
+inline Kind LineKind(int i) {
+    int n = 0; const HelpLine* ls = Lines(&n);
+    if (i < 0 || i >= n) return Kind::Body;
+    return ls[i].kind;
+}
+
+// fix thse isseue.md (nav-help typography): a run can be bold (**key**),
+// MONOSPACE (`literal`, a backtick span -> a Windows mono face for keystrokes /
+// literal tokens) or ITALIC (_hint_, an underscore span -> an italic face for
+// secondary guidance). The three toggles are INDEPENDENT and the markers are
+// NEVER rendered literally. Unmarked text is regular body.
+struct HelpRun { std::wstring text; bool bold = false; bool mono = false; bool italic = false; };
+inline std::vector<HelpRun> ParseRuns(const wchar_t* line) {
+    std::vector<HelpRun> runs;
+    std::wstring cur;
+    bool bold = false, mono = false, italic = false;
+    auto flush = [&]() {
+        if (!cur.empty()) { runs.push_back(HelpRun{cur, bold, mono, italic}); cur.clear(); }
+    };
+    for (const wchar_t* p = line; *p; ) {
+        if (p[0] == L'*' && p[1] == L'*') {
+            flush();
+            bold = !bold;
+            p += 2;
+        } else if (p[0] == L'`') {
+            flush();
+            mono = !mono;
+            ++p;
+        } else if (p[0] == L'_') {
+            flush();
+            italic = !italic;
+            ++p;
+        } else {
+            cur.push_back(*p);
+            ++p;
+        }
     }
-    return L"";
+    flush();
+    return runs;
 }
 
-enum class Vis { Hidden, Shown, Pinned };
+// Issue 1: transient hover card, NO pin. Hover OR click opens; stays open while
+// the pointer is on the button OR the card; leaving BOTH arms a short grace
+// timer (flicker guard) that hides it; Esc / popup-close dismiss it.
+enum class Vis { Hidden, Shown };
 
-inline Vis OnClick(Vis v) { return v == Vis::Pinned ? Vis::Hidden : Vis::Pinned; }
-inline Vis OnHoverEnter(Vis v) { return v == Vis::Hidden ? Vis::Shown : v; }
+inline Vis OnHoverEnter(Vis) { return Vis::Shown; }
+inline Vis OnClick(Vis) { return Vis::Shown; }
+inline Vis OnDismiss(Vis) { return Vis::Hidden; }
 
-inline bool StaysOpen(Vis v, bool pointerOnTrigger, bool pointerOnPopup) {
-    if (v == Vis::Pinned) return true;
-    if (v == Vis::Hidden) return false;
-    return pointerOnTrigger || pointerOnPopup;
+inline bool StaysOpen(Vis v, bool pointerOnTrigger, bool pointerOnCard) {
+    return v == Vis::Shown && (pointerOnTrigger || pointerOnCard);
 }
 
-inline Vis OnPointerUpdate(Vis v, bool pointerOnTrigger, bool pointerOnPopup) {
-    if (v == Vis::Shown && !StaysOpen(v, pointerOnTrigger, pointerOnPopup))
-        return Vis::Hidden;
+inline bool ShouldArmClose(Vis v, bool pointerOnTrigger, bool pointerOnCard) {
+    return v == Vis::Shown && !pointerOnTrigger && !pointerOnCard;
+}
+
+inline Vis OnCloseTimer(Vis v, bool pointerOnTrigger, bool pointerOnCard) {
+    if (v == Vis::Shown && !pointerOnTrigger && !pointerOnCard) return Vis::Hidden;
     return v;
 }
 
-inline Vis OnDismiss(Vis) { return Vis::Hidden; }
+inline int CloseDelayMs() { return 180; }
 
 inline bool FooterFitsWithInfo(int footerW, int infoW, int gap, int actionsW) {
     return (infoW + gap + actionsW) <= footerW;
@@ -4518,6 +4730,89 @@ inline bool FooterFitsWithInfo(int footerW, int infoW, int gap, int actionsW) {
 inline int InfoButtonSize(int buttonH) { return buttonH; }
 
 }  // namespace infohelp
+
+// ---- Navigation Help card scroll + sizing model ("Overflow and Scrollable
+// Help Card") ------------------------------------------------------------------
+// Byte-for-byte mirror of tests/helpcard_scroll_logic.h. Pure. The help card is
+// kept COMPACT: CapToWorkArea caps each dimension to the current monitor work
+// area (DPI-aware -- callers pass device px) so it never enlarges past the
+// available space as more content is added. When the measured content is taller
+// than the content viewport, NeedsScroll turns on the internal scrollbar and
+// ThumbRect gives its (theme-painted) thumb; the heading band is reserved
+// OUTSIDE the viewport (ViewportHeight) so it stays fixed while the body
+// scrolls. A wheel over the card scrolls ONLY the card and never the Selected
+// Items list or the chips (WheelTargetsHelpCard). Keep in lockstep with the
+// test header.
+namespace helpscroll {
+
+inline bool NeedsScroll(int contentH, int viewportH) {
+    return viewportH > 0 && contentH > viewportH;
+}
+
+inline int MaxScroll(int contentH, int viewportH) {
+    const int m = contentH - viewportH;
+    return m > 0 ? m : 0;
+}
+
+inline int ClampScroll(int scrollY, int maxScroll) {
+    if (scrollY < 0) return 0;
+    if (scrollY > maxScroll) return maxScroll;
+    return scrollY;
+}
+
+inline int OnWheel(int scrollY, int wheelDelta, int pxPerNotch, int maxScroll) {
+    const int notches = wheelDelta / 120;
+    scrollY -= notches * pxPerNotch;
+    return ClampScroll(scrollY, maxScroll);
+}
+
+inline int CapToWorkArea(int desired, int workExtent, int marginPx) {
+    int cap = workExtent - 2 * marginPx;
+    if (cap < 1) cap = workExtent;
+    return desired > cap ? cap : desired;
+}
+
+// Cap a desired card dimension to a FIXED maximum extent (DPI-scaled by the
+// caller, so this is pure px). A zero/negative max means "no fixed cap". The
+// help card applies this ALONGSIDE CapToWorkArea -- the SMALLER of the two
+// always wins -- so the card has a consistent configured maximum size and never
+// grows with its content past it; content beyond the resulting viewport scrolls
+// INTERNALLY (NeedsScroll) instead of enlarging the card.
+inline int CapToMax(int desired, int maxExtent) {
+    if (maxExtent > 0 && desired > maxExtent) return maxExtent;
+    return desired;
+}
+
+inline int ViewportHeight(int cardH, int headingBandH, int padBottom) {
+    const int v = cardH - headingBandH - padBottom;
+    return v > 0 ? v : 0;
+}
+
+struct Thumb { int y; int h; };
+inline Thumb ThumbRect(int scrollY, int contentH, int viewportH, int trackH,
+                       int minThumbH) {
+    if (contentH <= viewportH || contentH <= 0 || trackH <= 0) {
+        return Thumb{0, trackH};
+    }
+    const long long raw = static_cast<long long>(trackH) * viewportH / contentH;
+    int h = static_cast<int>(raw);
+    if (h < minThumbH) h = minThumbH;
+    if (h > trackH)    h = trackH;
+    const int maxScroll = contentH - viewportH;
+    const int maxThumbY = trackH - h;
+    int y = (maxScroll > 0)
+        ? static_cast<int>(static_cast<long long>(scrollY) * maxThumbY / maxScroll)
+        : 0;
+    if (y < 0)         y = 0;
+    if (y > maxThumbY) y = maxThumbY;
+    return Thumb{y, h};
+}
+
+inline bool WheelTargetsHelpCard(bool cardShown, bool pointerOverCard) {
+    return cardShown && pointerOverCard;
+}
+
+}  // namespace helpscroll
 
 // ---- Destination-section display model ----
 // Byte-for-byte mirror of tests/destination_logic.h (UI spec item 5).
@@ -5321,6 +5616,28 @@ static HFONT UiFontMono(UINT dpi) {
     return g_uiFontMono;
 }
 
+// fix thse isseue.md (nav-help typography): an ITALIC companion to UiFont --
+// the same Windows-default Segoe UI face, regular weight, italic slant, same
+// point size + per-DPI cache. Used for the help card's _hint_ spans so
+// secondary guidance reads as softer, distinct text.
+static HFONT g_uiFontItalic = nullptr;
+static UINT  g_uiFontItalicDpi = 0;
+static HFONT UiFontItalic(UINT dpi) {
+    if (g_uiFontItalic && g_uiFontItalicDpi == dpi) {
+        return g_uiFontItalic;
+    }
+    if (g_uiFontItalic) {
+        DeleteObject(g_uiFontItalic);
+        g_uiFontItalic = nullptr;
+    }
+    g_uiFontItalic = CreateFontW(ScaleDpi(-17, dpi), 0, 0, 0, FW_NORMAL, TRUE,
+                                 FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                 CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY,
+                                 DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    g_uiFontItalicDpi = dpi;
+    return g_uiFontItalic;
+}
+
 // ---- Popup theme palette ----
 // One source of truth for every popup colour in light and dark mode. The
 // WndProc colour handlers (WM_CTLCOLORSTATIC/EDIT) and the owner-draw buttons
@@ -5387,6 +5704,7 @@ static const COLORREF kColNeutralDarkBorder   = RGB(74, 74, 74);    // #4A4A4A
 // buttons (btn::PressTone == Green), the green counterpart to the Cancel/Close
 // red press feedback. One green source of truth; a white caption reads on it.
 static const COLORREF kColConfirmPressed      = RGB(16, 124, 16);   // #107C10 success green
+static const COLORREF kColConfirm             = RGB(22, 150, 34);   // fix thse isseue.md Issue 1: idle success green for the '?' navigation-help button (pressed deepens to kColConfirmPressed)
 // fix thse isseue.md top note ("green color is not good for auto group - keep
 // it same as group"): the Auto Group button no longer has a dedicated green
 // palette. Once enabled it reuses the Group button's create tokens; while the
@@ -5820,7 +6138,7 @@ struct NamePromptData {
     std::vector<sel::Item> items;         // full selection for the Selected Items panel
     int listTopRow = 0;                   // Selected Items scroll position (top row)
     int listVisibleRows = 0;              // fix thse isseue.md Phase 1A: TRUE visible-row capacity cached by the owner-draw paint (declared cap reconciled with what the viewport physically fits); 0 until first paint. Wheel/key scrolling pages by THIS so a declared-but-unfit row stays reachable.
-    bool showExt = false;                 // Show-extensions toggle; default OFF (mirrors showext::DefaultOn()): size badge only until turned ON
+    bool showExt = true;                  // fix thse isseue.md Issue 3: Show-extensions toggle defaults ON (mirrors showext::DefaultOn()): a new Group popup shows complete filenames; clicking toggles OFF/ON
     std::wstring destPath;                // resolved/desired destination
     std::wstring lastTarget;              // remembered last destination (may be empty)
     std::wstring effectiveDest;           // #2: captured parent for the dest preview (UI only)
@@ -5834,8 +6152,14 @@ struct NamePromptData {
     HWND destField = nullptr;             // Destination read-only field (Group only)
     HWND destCopyBtn = nullptr;           // Destination "copy path" button (id 111, Group only)
     HWND infoBtn = nullptr;               // fix thse isseue.md UI-03: footer INFO/help button (id 121, Group only)
-    HWND helpPanel = nullptr;             // fix thse isseue.md UI-03/UI-06: themed help surface (SS_OWNERDRAW id 122, shown on click)
-    int  helpVis = 0;                     // infohelp::Vis for the help panel (0=Hidden, 1=Shown, 2=Pinned)
+    HWND helpCard = nullptr;              // fix thse isseue.md Issue 1: transient navigation-help card -- a SEPARATE non-activating popup (NOT a child overlay), created on demand, painted by HelpCardWndProc so the Selected Items list repaint can never cover it
+    int  helpVis = 0;                     // infohelp::Vis for the help card (0=Hidden, 1=Shown)
+    bool helpPtrOnBtn = false;            // Issue 1: pointer is over the '?' button (hover tracking)
+    bool helpPtrOnCard = false;           // Issue 1: pointer is over the help card (hover tracking)
+    unsigned long long helpCloseAtTick = 0;  // Issue 1: GetTickCount64() deadline for the grace-close (0 = not armed); infohelp::CloseDelayMs()
+    int  helpScrollY = 0;                 // Overflow card: vertical scroll offset of the help content (device px); helpscroll::ClampScroll keeps it in range
+    int  helpContentH = 0;                // Overflow card: measured FULL scrollable content height (device px), set by MeasureHelpCard
+    int  helpViewportH = 0;               // Overflow card: scrollable viewport height (device px, heading band excluded), set by MeasureHelpCard
     HWND createBtn = nullptr;             // Create button (relayout target, Phase 7)
     HWND cancelBtn = nullptr;             // Cancel button (relayout target, Phase 7)
     HWND sizeToggle = nullptr;            // compact/expanded titlebar toggle (id 103, Group only)
@@ -5866,9 +6190,11 @@ struct NamePromptData {
     int chipScrollOffset = 0;             // horizontal chip-strip pan (px); INDEPENDENT of listTopRow
     viewmode::Mode selViewMode = viewmode::Mode::List; // fix thse isseue.md Phase A: Selected Items presentation mode (List/Large/ExtraLarge); Ctrl+wheel cycles it, never changes the real selection
     int selGridCols = 1;                  // Phase A: last painted grid column count (cached so the modal loop can preserve the first-visible item across a mode change); 1 in List mode
+    int pendingFirstItem = -1;            // v0.12.68 #2: first VISIBLE item index captured just before a Ctrl+Wheel view switch; the next paint converts it to listTopRow for the NEW mode's columns (viewmode::TopRowForItem), clamps it, then resets to -1 -- preserving the visible context across a zoom
     unsigned long long listSbActivityTick = 0; // fix thse isseue.md Phase B: GetTickCount64() of the last list scroll/interaction; the scrollbar stays visible for sbauto::kIdleHideMs after it, then a one-shot timer fades it
     bool listPointerInside = false;       // Phase B: pointer currently over the Selected Items viewport (keeps the auto-hide scrollbar revealed); cleared by the idle timer
     int chipFocusIndex = -1;              // keyboard-focused chip index (-1 = none)
+    int chipNavItem = -1;                 // fix thse isseue.md Phase 5 + ADD-ON: current find-navigation match as a STABLE item index (survives a view-mode change); -1 = none. Kept SEPARATELY from the chip filter so a zoom/reflow never loses the match.
     int chipContentW = 0;                 // total chip-strip content width @ last paint (px)
     int chipViewportW = 0;                // chip-strip viewport width @ last paint (px)
     RECT chipStripRect = {0, 0, 0, 0};    // chip-strip hit/viewport area in list (id 110) client coords
@@ -5878,6 +6204,15 @@ struct NamePromptData {
     bool showExtLastPainted = false;      // last showExt state the toggle control reflected
     RECT chipToggleRect = {0, 0, 0, 0};   // fix thse isseue.md #3: Show-extensions toggle hit rect (list client coords)
     bool manualSized = false;             // fix thse isseue.md Phase 3: the user has resized or maximized the popup, so the layout must NOT force it back to the fixed compact/expanded size (density toggles then only reflow content)
+    // fix thse isseue.md v0.12.67 (top note): client size latched at
+    // WM_ENTERSIZEMOVE so WM_EXITSIZEMOVE can tell a pure MOVE (dragging the
+    // popup by its custom header) from a real RESIZE. A move must NOT run the
+    // reflow/relayout path -- that repositioned every child and repainted, so
+    // the whole popup flashed / re-rendered when dragged by the header. Only a
+    // genuine size change reflows now.
+    int sizeMoveClientW = 0;              // client width  at the last WM_ENTERSIZEMOVE
+    int sizeMoveClientH = 0;              // client height at the last WM_ENTERSIZEMOVE
+    bool inSizeMove = false;              // true between WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE
 
     // fix thse isseue.md Phase 1: per-popup cache of high-resolution Shell icon
     // handles, keyed by iconsrc::CacheKey(type, tier, dpi). Scrolling and
@@ -5886,9 +6221,34 @@ struct NamePromptData {
     // zoom/scroll never leaks a GDI handle. (scroll offset / view mode are NOT
     // part of the key, so they stay independent of icon resolution.)
     std::vector<std::pair<std::wstring, HICON>> iconCache;
+
+    // fix thse isseue.md Issue 2: async image-thumbnail cache for the Large /
+    // Extra large grid views. Extraction runs on a dedicated background thread
+    // (IShellItemImageFactory) so opening the popup and scrolling never block;
+    // results are cached by "path|px" and reused while scrolling. Only true
+    // image files are ever requested (the tested thumbs:: model); everything
+    // else keeps the crisp Shell icon fallback. Every bitmap + the worker thread
+    // are released on teardown (StopThumbThread, then this destructor).
+    struct ThumbEntry {
+        HBITMAP bmp = nullptr;
+        int w = 0, h = 0;
+        bool done = false;
+        bool failed = false;
+    };
+    std::vector<std::pair<std::wstring, ThumbEntry>> thumbCache;  // key = path|px
+    std::vector<std::pair<std::wstring, int>> thumbQueueReq;      // pending (path, px)
+    CRITICAL_SECTION thumbCs = {};
+    HANDLE thumbThread = nullptr;
+    HANDLE thumbWake   = nullptr;
+    volatile LONG thumbStop = 0;
+    bool   thumbInit = false;
+    HWND   ownerHwnd = nullptr;      // for the worker's cross-thread repaint post
+
     ~NamePromptData() {
         for (auto& kv : iconCache)
             if (kv.second) DestroyIcon(kv.second);
+        for (auto& kv : thumbCache)
+            if (kv.second.bmp) DeleteObject(kv.second.bmp);
     }
 };
 
@@ -6067,7 +6427,9 @@ static void ApplyPromptLayout(HWND hwnd, NamePromptData* d,
     deferMove(d->destField,   inputfield::InnerEditRect(L.destField.x, L.destField.y, L.destField.w, L.destField.h));
     deferMove(d->destCopyBtn, L.destCopyBtn);
     deferMove(d->infoBtn,     L.infoButton);        // UI-03: footer info/help button
-    deferMove(d->helpPanel,   L.selectedContent);   // UI-06: help panel overlays the list area
+    // fix thse isseue.md Issue 1: the navigation-help card is a SEPARATE
+    // non-activating popup window (not a child), so it is NOT laid out here;
+    // PositionHelpCard() re-anchors it to the '?' button on move/resize/DPI.
     deferMove(d->nameLabel,   L.nameLabel);
     deferMove(d->edit,        inputfield::InnerEditRect(L.nameField.x, L.nameField.y, L.nameField.w, L.nameField.h));
     deferMove(d->segCopyBtn,  L.segCopy);
@@ -6462,7 +6824,7 @@ inline int NextChipX(int x, int chipW, int gap) { return x + chipW + gap; }
 namespace showext {
 
 // The toggle starts OFF; sizes are the default per-row metadata.
-inline bool DefaultOn() { return false; }
+inline bool DefaultOn() { return true; }  // fix thse isseue.md Issue 3: Show extensions defaults ON
 
 // The toolbar action label.
 inline const wchar_t* ToggleLabel() { return L"Show extensions"; }
@@ -6501,6 +6863,173 @@ inline int SwitchKnobLeft(int trackLeft, int trackW, int trackH, int inset,
 }
 
 }  // namespace showext
+
+// ---- Image-thumbnail model (fix thse isseue.md Issue 2) ----
+// Byte-for-byte mirror of tests/thumb_logic.h. Pure. Single source of truth for
+// which files are eligible for a thumbnail (raster images ONLY), the grid-only
+// gating, the aspect-ratio-preserving fit into a grid cell and the request size.
+// The live async IShellItemImageFactory extraction + cache + paint are wired to
+// THESE functions.
+namespace thumbs {
+
+inline wchar_t Lower(wchar_t c) {
+    return (c >= L'A' && c <= L'Z') ? static_cast<wchar_t>(c - L'A' + L'a') : c;
+}
+
+inline bool IsImageExtension(const wchar_t* ext) {
+    if (!ext) return false;
+    std::wstring e;
+    for (const wchar_t* p = ext; *p; ++p) e.push_back(Lower(*p));
+    if (!e.empty() && e[0] == L'.') e.erase(0, 1);
+    if (e.empty()) return false;
+    static const wchar_t* kImg[] = {
+        L"jpg", L"jpeg", L"jpe", L"jfif", L"png", L"gif", L"bmp",
+        L"dib", L"tif", L"tiff", L"webp", L"ico", L"heic", L"heif", nullptr};
+    for (int i = 0; kImg[i]; ++i) if (e == kImg[i]) return true;
+    return false;
+}
+
+inline std::wstring ExtOf(const std::wstring& name) {
+    const size_t dot = name.find_last_of(L'.');
+    if (dot == std::wstring::npos) return L"";
+    const size_t slash = name.find_last_of(L"\\/");
+    if (slash != std::wstring::npos && dot < slash) return L"";
+    if (dot + 1 >= name.size()) return L"";
+    return name.substr(dot + 1);
+}
+
+inline bool WantsThumbnail(bool isGridView, bool isFolder, bool isImageExt) {
+    return isGridView && !isFolder && isImageExt;
+}
+
+inline bool WantsThumbnailFor(bool isGridView, bool isFolder,
+                              const std::wstring& name) {
+    return WantsThumbnail(isGridView, isFolder,
+                          IsImageExtension(ExtOf(name).c_str()));
+}
+
+struct FitBox { int x = 0, y = 0, w = 0, h = 0; };
+inline FitBox FitRect(int srcW, int srcH, int cellW, int cellH) {
+    if (cellW < 0) cellW = 0;
+    if (cellH < 0) cellH = 0;
+    if (srcW <= 0 || srcH <= 0) return FitBox{0, 0, cellW, cellH};
+    long long w = static_cast<long long>(cellH) * srcW / srcH;
+    long long h;
+    if (w <= cellW) {
+        h = cellH;
+    } else {
+        w = cellW;
+        h = static_cast<long long>(cellW) * srcH / srcW;
+    }
+    int iw = static_cast<int>(w);
+    int ih = static_cast<int>(h);
+    if (iw < 1) iw = 1;
+    if (ih < 1) ih = 1;
+    return FitBox{(cellW - iw) / 2, (cellH - ih) / 2, iw, ih};
+}
+
+inline int RequestPx(int cellW, int cellH) {
+    return cellW < cellH ? cellW : cellH;
+}
+
+}  // namespace thumbs
+
+// ---- Remembered Group popup placement model (fix thse isseue.md Issue 6) ----
+// Byte-for-byte mirror of tests/winplace_logic.h. Pure. Clamps a remembered
+// window rect onto the current monitor work area (shrink + nudge; nearest-
+// monitor fallback is the caller passing that monitor's work rect), tests
+// visibility, and owns the "capture NORMAL only when not maximized" rule.
+namespace winplace {
+
+struct Rect {
+    int left = 0, top = 0, right = 0, bottom = 0;
+    int w() const { return right - left; }
+    int h() const { return bottom - top; }
+};
+
+inline Rect ClampToWork(Rect r, Rect work) {
+    int w = r.w();
+    int h = r.h();
+    const int ww = work.w();
+    const int wh = work.h();
+    if (w > ww) w = ww;
+    if (h > wh) h = wh;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    int x = r.left;
+    int y = r.top;
+    if (x + w > work.right)  x = work.right - w;
+    if (y + h > work.bottom) y = work.bottom - h;
+    if (x < work.left) x = work.left;
+    if (y < work.top)  y = work.top;
+    return Rect{x, y, x + w, y + h};
+}
+
+inline bool IntersectsWork(Rect r, Rect work) {
+    return r.left < work.right && r.right > work.left &&
+           r.top < work.bottom && r.bottom > work.top;
+}
+
+inline bool ShouldCaptureNormal(bool isZoomed) { return !isZoomed; }
+
+}  // namespace winplace
+
+// ---- session-remembered Group popup placement (Issue 6) --------------------
+// Lifetime = the mod's lifetime: it survives repeated Ctrl+G opens. A Windhawk /
+// Explorer restart clears it -- the mod has no writable settings store to persist
+// across restarts, and the spec forbids adding a settings UI just for this, so
+// cross-restart persistence is intentionally out of scope.
+static volatile LONG g_groupPlaceInit   = 0;             // any user placement remembered this session
+static volatile LONG g_groupMaximized   = 0;             // last user state was maximized
+static volatile LONG g_groupNormalValid = 0;             // g_groupNormalRect holds a real NORMAL rect
+static RECT          g_groupNormalRect  = {0, 0, 0, 0};  // last NORMAL window rect (screen px)
+
+// Capture the CURRENT Group popup placement for the next open. The NORMAL rect
+// is stored ONLY when the window is not maximized (winplace::ShouldCaptureNormal)
+// so a maximize never overwrites the restore size; the maximize STATE is stored
+// separately. New Folder is never a Group popup, so it is never remembered.
+static void RememberGroupPlacement(HWND hwnd, NamePromptData* d) {
+    if (!d || !d->isGroup) return;
+    const bool zoomed = IsZoomed(hwnd) != FALSE;
+    InterlockedExchange(&g_groupMaximized, zoomed ? 1 : 0);
+    if (winplace::ShouldCaptureNormal(zoomed)) {
+        RECT r{};
+        if (GetWindowRect(hwnd, &r) && (r.right - r.left) > 0 &&
+            (r.bottom - r.top) > 0) {
+            g_groupNormalRect = r;
+            InterlockedExchange(&g_groupNormalValid, 1);
+        }
+    }
+    InterlockedExchange(&g_groupPlaceInit, 1);
+}
+
+// Restore the remembered NORMAL rect onto the nearest monitor's work area before
+// the popup is shown (clamped so it is always visible). Returns true if a normal
+// placement was applied (the caller then latches manualSized and skips the
+// default centering). Maximize is applied by the caller AFTER ShowWindow.
+static bool ApplyRememberedNormalPlacement(HWND hwnd, NamePromptData* d) {
+    if (!d || !d->isGroup) return false;
+    if (!InterlockedCompareExchange(&g_groupPlaceInit, 0, 0)) return false;
+    if (!InterlockedCompareExchange(&g_groupNormalValid, 0, 0)) return false;
+    HMONITOR mon = MonitorFromRect(&g_groupNormalRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi; mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(mon, &mi)) return false;
+    const winplace::Rect saved{g_groupNormalRect.left, g_groupNormalRect.top,
+                               g_groupNormalRect.right, g_groupNormalRect.bottom};
+    const winplace::Rect work{mi.rcWork.left, mi.rcWork.top,
+                              mi.rcWork.right, mi.rcWork.bottom};
+    const winplace::Rect c = winplace::ClampToWork(saved, work);
+    SetWindowPos(hwnd, nullptr, c.left, c.top, c.right - c.left, c.bottom - c.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    d->manualSized = true;   // reflow to the restored size, not the compact preset
+    return true;
+}
+
+// True when the remembered placement for this session was maximized.
+static bool GroupPlacementMaximized() {
+    return InterlockedCompareExchange(&g_groupMaximized, 0, 0) != 0 &&
+           InterlockedCompareExchange(&g_groupPlaceInit, 0, 0) != 0;
+}
 
 // Byte-for-byte mirror of tests/chip_scroll_logic.h.
 namespace chipscroll {
@@ -6688,6 +7217,109 @@ inline bool ChipShowsDottedOutline(bool isActiveFilter, bool isFocused) {
 }
 
 }  // namespace chipfilter
+
+// fix thse isseue.md Phase 5 + ADD-ON: PURE result-navigation model for the
+// summary chips -- byte-for-byte mirror of tests/chip_nav_logic.h (namespace
+// chipnav). A summary chip is BOTH a filter and a find-navigator: the first
+// click on an extension chip reveals the first matching item and clicking the
+// already-active chip again reveals the next match, wrapping at the end. It
+// does NOT duplicate the match rule (delegates to chipfilter::RowFor) or the
+// item<->row mapping (viewmode::TopRowForItem), so List and the two grid modes
+// stay consistent with the live renderer. The navigation CURSOR is a STABLE
+// ITEM INDEX kept SEPARATELY from the active filter, so it survives a view-mode
+// change. Nothing here reorders items, touches the real Explorer selection or
+// changes the Copy/Move plan.
+namespace chipnav {
+
+// One selected row as the navigator sees it: just enough to run the shared
+// chipfilter match rule. `extKey` is the normalized lowercase extension key
+// ("" for folders and extensionless files); `isFolder` marks a directory.
+struct Item {
+    std::wstring extKey;
+    bool isFolder;
+};
+
+// The ordered list of item indices that MATCH the active chip filter, in the
+// ORIGINAL item order (never reordered). Delegates to chipfilter::RowFor so the
+// find-navigator and the row highlighter always agree on what "matches". When
+// no highlight filter is active (None / Items) nothing matches, so the
+// navigator stays idle for those chips.
+inline std::vector<int> Matches(const chipfilter::State& s,
+                                const std::vector<Item>& items) {
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+        if (chipfilter::RowFor(s, items[i].extKey, items[i].isFolder)
+            == chipfilter::Row::Matched) {
+            out.push_back(i);
+        }
+    }
+    return out;
+}
+
+// The next current-match item index.
+//   matches : ordered matching item indices (from Matches()).
+//   curItem : the current match's item index, or -1 when there is none.
+//   reclick : true ONLY when the SAME already-active chip was clicked again.
+// Rules:
+//   - no matches                      -> -1 (empty results never jump).
+//   - fresh activation (reclick=false)-> the FIRST match.
+//   - reclick with a live cursor      -> the NEXT match, wrapping at the end.
+//   - reclick with a stale cursor     -> the FIRST match.
+inline int NextMatch(const std::vector<int>& matches, int curItem, bool reclick) {
+    if (matches.empty()) return -1;
+    if (!reclick) return matches.front();
+    int pos = -1;
+    for (int i = 0; i < static_cast<int>(matches.size()); ++i) {
+        if (matches[i] == curItem) { pos = i; break; }
+    }
+    if (pos < 0) return matches.front();
+    return matches[(pos + 1) % static_cast<int>(matches.size())];
+}
+
+// The MINIMAL new top row that reveals the item at `itemIndex`, given the
+// current scroll (`topRow`) and how many whole rows are visible (`visibleRows`).
+// The item index is mapped to its VISUAL row with viewmode::TopRowForItem using
+// the ACTUAL column count, so List (cols==1) and the grid modes are handled by
+// one path. If the target row is already visible the scroll is unchanged (so
+// adjacent matches do not make the viewport jump); otherwise it scrolls just
+// far enough -- up to the target, or down so the target becomes the last
+// visible row -- then clamps to the valid range. itemIndex < 0 (empty results)
+// leaves the scroll untouched.
+inline int RevealTopRow(viewmode::Mode mode, int itemIndex, int itemCount,
+                        int cols, int topRow, int visibleRows) {
+    if (itemIndex < 0) return topRow;
+    if (visibleRows < 1) visibleRows = 1;
+    if (cols < 1) cols = 1;
+
+    const int target = viewmode::TopRowForItem(mode, itemIndex, cols);
+    const int totalRows = (mode == viewmode::Mode::List)
+                              ? itemCount
+                              : viewmode::GridRows(itemCount, cols);
+    int maxTop = totalRows - visibleRows;
+    if (maxTop < 0) maxTop = 0;
+
+    int newTop = topRow;
+    if (target < topRow) {
+        newTop = target;                          // scroll up to the match
+    } else if (target > topRow + visibleRows - 1) {
+        newTop = target - visibleRows + 1;        // scroll down just enough
+    }                                             // else: already visible
+
+    if (newTop < 0) newTop = 0;
+    if (newTop > maxTop) newTop = maxTop;
+    return newTop;
+}
+
+// Is the item at `itemIndex` the CURRENT match? This is the extra visual state
+// layered on top of chipfilter::Row::Matched: every matching row stays Matched
+// (normal strength), and additionally the one current-match row gets a subtle
+// accent so the user can see where they are without losing the other matches.
+// A cursor of -1 means nothing is current.
+inline bool IsCurrentMatch(int itemIndex, int curItem) {
+    return curItem >= 0 && itemIndex == curItem;
+}
+
+}  // namespace chipnav
 
 // fix thse isseue.md #2: bridge the PRIMITIVE chip-filter state stored on
 // NamePromptData (defined earlier in this single-pass TU, so it cannot name the
@@ -6931,7 +7563,73 @@ static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptDa
     layout::PromptLayout base = layout::ComputePromptLayout(
         d->isGroup, d->expanded, static_cast<int>(d->items.size()));
     if (!d->isGroup) return base;
-    if (!(d->manualSized || IsZoomed(hwnd))) return base;
+    // fix thse isseue.md v0.12.67 (Issue #1 B) + Phase 2: make the layout
+    // MODE-AWARE in EVERY window state (preferred, remembered-size, manually
+    // resized and maximized). ComputePromptLayout reserves the Selected list at
+    // the LIST row height (kSelRowH=24); in a GRID view the rows are much taller
+    // WHOLE cells, so a list-sized card clips the cells and crams the grid.
+    // FIRST re-size the Selected card to the current mode's whole grid cells --
+    // bounded by the SAME vertical budget the list used -- then shift every
+    // section below it by the same delta. This runs UNCONDITIONALLY (not only on
+    // the preferred path) so the manual-resize / maximize reflow BELOW starts
+    // from the SAME grid geometry, and it also hands that reflow the mode's cell
+    // height + whole-cell cap so the resize path never falls back to a 24px List
+    // row (the Phase 2 defect: clipped grid cells on resize/maximize). The
+    // painted card, the owner-draw list HWND, WM_NCHITTEST and the scroll math
+    // all read this one geometry. List mode is unchanged (delta 0, List defaults
+    // into ReflowToClient).
+    int selRowHForReflow = layout::kSelRowH;   // List default (24px row)
+    int selCapForReflow  = -1;                 // List: use ReflowToClient's own cap
+    if (viewmode::IsGrid(d->selViewMode)) {
+        const int gutter =
+            listscroll::kScrollbarW + listscroll::kMetaScrollGap;
+        const int availW   = base.selectedContent.w - gutter;
+        const int cols     = viewmode::Columns(d->selViewMode, availW);
+        const int itemCount = static_cast<int>(d->items.size());
+        const int headerBlockH =
+            base.selectedList.y - base.selectedContent.y;
+        const int listBudget = base.selectedContent.h - headerBlockH;
+        const int cellH    = viewmode::CellH(d->selViewMode);
+        int fit = (cellH > 0) ? listBudget / cellH : 0;   // whole cells in the preferred budget
+        if (fit < 1) fit = 1;
+        const int visRows = viewmode::SelectedGridVisibleRows(
+            d->selViewMode, itemCount, cols, listBudget);
+        const int newContentH = headerBlockH + visRows * cellH;
+        const int delta = newContentH - base.selectedContent.h;
+        if (delta != 0) {
+            base.selectedContent.h += delta;
+            base.selectedList.h    += delta;
+            base.selectedCard.h    += delta;
+            base.groupHeader.h     += delta;
+            const auto shiftY = [delta](layout::Rect& r) {
+                if (r.w > 0) r.y += delta;
+            };
+            shiftY(base.destCard);     shiftY(base.destLabel);
+            shiftY(base.destDesc);     shiftY(base.destField);
+            shiftY(base.destCopyBtn);
+            shiftY(base.nameCard);     shiftY(base.nameLabel);
+            shiftY(base.nameDesc);     shiftY(base.nameField);
+            shiftY(base.actionCard);   shiftY(base.actionTitle);
+            shiftY(base.actionDesc);
+            shiftY(base.segCopy);      shiftY(base.segMove);
+            shiftY(base.opToggle);     shiftY(base.keyboardHint);
+            shiftY(base.createButton); shiftY(base.cancelButton);
+            shiftY(base.autoGroupButton); shiftY(base.infoButton);
+            base.windowH += delta;
+        }
+        // Mode-aware metrics the resize/maximize reflow MUST use (never 24px).
+        selRowHForReflow = cellH;
+        selCapForReflow  = fit;
+    }
+
+    // Preferred / remembered-size popup: the (now mode-aware) base IS the layout.
+    if (!(d->manualSized || IsZoomed(hwnd))) {
+        return base;
+    }
+
+    // Manually resized or maximized: stretch the SAME mode-aware base into the
+    // live client rect, passing the mode's whole-cell height + cap so the grid
+    // viewport and scroll capacity are derived from the owner-draw geometry.
     RECT rc{};
     GetClientRect(hwnd, &rc);
     const int cw = rc.right - rc.left;
@@ -6940,7 +7638,8 @@ static layout::PromptLayout ComputeEffectiveLayout(HWND hwnd, const NamePromptDa
     const int ddpi = static_cast<int>(d->dpi ? d->dpi : 96);
     return layout::ReflowToClient(base,
         MulDiv(cw, 96, ddpi), MulDiv(ch, 96, ddpi),
-        winresize::MinClientW(), winresize::MinClientH());
+        winresize::MinClientW(), winresize::MinClientH(),
+        selRowHForReflow, selCapForReflow);
 }
 
 // Win32 EXTRACTION + per-popup cache for the Phase 1 DPI-aware Shell icon
@@ -7015,6 +7714,21 @@ enum class IconId {
 inline int IconStrokeWidth(int boxPx) {
     int w = (boxPx + 8) / 16;
     return w < 1 ? 1 : w;
+}
+
+// fix thse isseue.md Phase 5 + ADD-ON: the CURRENT find-navigation match gets a
+// subtle, theme-aware accent OUTLINE (never a fill), layered on top of the
+// normal matched-row look so the OTHER matches stay fully visible. A hollow
+// brush keeps the row/cell content underneath untouched (no reorder, no
+// selection change). Themed via the caller's accent colour.
+static void DrawCurrentMatchOutline(HDC hdc, const RECT& rc, COLORREF accent) {
+    HPEN pen = CreatePen(PS_SOLID, 1, accent);
+    HGDIOBJ oldPen = SelectObject(hdc, pen);
+    HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(HOLLOW_BRUSH));
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, 6, 6);
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    DeleteObject(pen);
 }
 
 static void DrawIcon(HDC hdc, IconId id, const RECT& rc, COLORREF color) {
@@ -7699,6 +8413,589 @@ static void DrawSectionCard(HDC hdc, const RECT& rc, COLORREF fill,
     DeleteObject(pen);
 }
 
+// ============================================================================
+// fix thse isseue.md Issue 2: async image-thumbnail extraction + cache.
+//
+// A dedicated per-popup worker thread extracts real image thumbnails via
+// IShellItemImageFactory (SIIGBF_THUMBNAILONLY, so non-image / unsupported files
+// simply fail -> the crisp Shell icon fallback is kept). Results are cached by
+// "path|px" so scrolling and view switches reuse them. The paint path NEVER
+// blocks: it looks up the cache, enqueues a miss, draws the icon this frame and
+// repaints when the worker posts WM_APP_THUMB_READY. All bitmaps + the thread
+// are released by StopThumbThread() before the popup's NamePromptData dies.
+// ============================================================================
+static const UINT WM_APP_THUMB_READY = WM_APP + 7;
+
+static DWORD WINAPI ThumbThreadProc(LPVOID param) {
+    NamePromptData* d = reinterpret_cast<NamePromptData*>(param);
+    const HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    while (WaitForSingleObject(d->thumbWake, INFINITE) == WAIT_OBJECT_0) {
+        if (InterlockedCompareExchange(&d->thumbStop, 0, 0)) break;
+        for (;;) {
+            if (InterlockedCompareExchange(&d->thumbStop, 0, 0)) break;
+            std::wstring path;
+            int px = 0;
+            EnterCriticalSection(&d->thumbCs);
+            if (d->thumbQueueReq.empty()) {
+                LeaveCriticalSection(&d->thumbCs);
+                break;
+            }
+            path = d->thumbQueueReq.back().first;   // LIFO: the most recently
+            px   = d->thumbQueueReq.back().second;  // requested (visible) item first
+            d->thumbQueueReq.pop_back();
+            LeaveCriticalSection(&d->thumbCs);
+
+            HBITMAP bmp = nullptr;
+            int bw = 0, bh = 0;
+            bool ok = false;
+            IShellItemImageFactory* factory = nullptr;
+            if (!path.empty() &&
+                SUCCEEDED(SHCreateItemFromParsingName(
+                    path.c_str(), nullptr, IID_PPV_ARGS(&factory))) && factory) {
+                SIZE sz = {px, px};
+                HBITMAP hb = nullptr;
+                // THUMBNAILONLY => a real content thumbnail or failure (never a
+                // generic icon); the caller supplies the icon fallback itself.
+                if (SUCCEEDED(factory->GetImage(
+                        sz, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK, &hb)) && hb) {
+                    BITMAP bm = {};
+                    GetObject(hb, sizeof(bm), &bm);
+                    bmp = hb;
+                    bw = bm.bmWidth;
+                    bh = bm.bmHeight;
+                    ok = true;
+                }
+                factory->Release();
+            }
+
+            const std::wstring key = path + L"|" + std::to_wstring(px);
+            EnterCriticalSection(&d->thumbCs);
+            bool stored = false;
+            for (auto& kv : d->thumbCache) {
+                if (kv.first == key) {
+                    if (ok) {
+                        if (kv.second.bmp && kv.second.bmp != bmp)
+                            DeleteObject(kv.second.bmp);
+                        kv.second.bmp = bmp;
+                        kv.second.w = bw;
+                        kv.second.h = bh;
+                    }
+                    kv.second.done = true;
+                    kv.second.failed = !ok;
+                    stored = true;
+                    break;
+                }
+            }
+            if (!stored) {
+                NamePromptData::ThumbEntry e;
+                e.bmp = ok ? bmp : nullptr;
+                e.w = bw;
+                e.h = bh;
+                e.done = true;
+                e.failed = !ok;
+                d->thumbCache.push_back({key, e});
+            }
+            LeaveCriticalSection(&d->thumbCs);
+            if (!ok && bmp) DeleteObject(bmp);
+
+            HWND owner = d->ownerHwnd;
+            if (owner) PostMessageW(owner, WM_APP_THUMB_READY, 0, 0);
+        }
+    }
+    if (SUCCEEDED(coHr)) CoUninitialize();
+    return 0;
+}
+
+static void EnsureThumbThread(NamePromptData* d) {
+    if (!d || d->thumbInit) return;
+    InitializeCriticalSection(&d->thumbCs);
+    d->thumbStop = 0;
+    d->thumbWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // auto-reset
+    d->thumbInit = true;
+    d->thumbThread = CreateThread(nullptr, 0, ThumbThreadProc, d, 0, nullptr);
+}
+
+// fix thse isseue.md Issue 2: stop + free the thumbnail worker and every cached
+// bitmap. Called when the popup closes, BEFORE ~NamePromptData, so the worker
+// can never post to a dead window or race the cache teardown.
+static void StopThumbThread(NamePromptData* d) {
+    if (!d || !d->thumbInit) return;
+    InterlockedExchange(&d->thumbStop, 1);
+    if (d->thumbWake) SetEvent(d->thumbWake);
+    if (d->thumbThread) {
+        WaitForSingleObject(d->thumbThread, 3000);
+        CloseHandle(d->thumbThread);
+        d->thumbThread = nullptr;
+    }
+    if (d->thumbWake) {
+        CloseHandle(d->thumbWake);
+        d->thumbWake = nullptr;
+    }
+    EnterCriticalSection(&d->thumbCs);
+    for (auto& kv : d->thumbCache)
+        if (kv.second.bmp) DeleteObject(kv.second.bmp);
+    d->thumbCache.clear();
+    d->thumbQueueReq.clear();
+    LeaveCriticalSection(&d->thumbCs);
+    DeleteCriticalSection(&d->thumbCs);
+    d->thumbInit = false;
+}
+
+// Paint-time lookup. Returns a cached thumbnail (+ its pixel dims) when ready;
+// otherwise enqueues the request, wakes the worker and returns null so the
+// caller draws the Shell icon this frame. NEVER blocks on extraction.
+static HBITMAP GetThumbnailForPaint(NamePromptData* d, HWND owner,
+                                    const std::wstring& path, int px,
+                                    int* outW, int* outH) {
+    if (!d || path.empty() || px <= 0) return nullptr;
+    d->ownerHwnd = owner;
+    EnsureThumbThread(d);
+    const std::wstring key = path + L"|" + std::to_wstring(px);
+    HBITMAP result = nullptr;
+    bool enqueue = false;
+    EnterCriticalSection(&d->thumbCs);
+    bool found = false;
+    for (auto& kv : d->thumbCache) {
+        if (kv.first == key) {
+            found = true;
+            if (kv.second.done && !kv.second.failed && kv.second.bmp) {
+                result = kv.second.bmp;
+                if (outW) *outW = kv.second.w;
+                if (outH) *outH = kv.second.h;
+            }
+            break;
+        }
+    }
+    if (!found) {
+        d->thumbCache.push_back({key, NamePromptData::ThumbEntry{}});  // mark requested
+        d->thumbQueueReq.push_back({path, px});
+        enqueue = true;
+    }
+    LeaveCriticalSection(&d->thumbCs);
+    if (enqueue && d->thumbWake) SetEvent(d->thumbWake);
+    return result;
+}
+
+// ============================================================================
+// fix thse isseue.md Issue 1: transient navigation-help card.
+//
+// The old help surface was an SS_OWNERDRAW child (id 122) sized to the Selected
+// Items area that REPLACED the item list and toggled a pinned state. It is gone
+// (see the removed WM_DRAWITEM id-122 branch). Navigation help is now a small,
+// self-contained, NON-ACTIVATING popup window anchored above the footer '?'
+// button. Because it is a separate top-level window (not a sibling of the list),
+// the Selected Items repaint can never paint over it, and because it is
+// WS_EX_NOACTIVATE it never steals focus from the folder-name edit.
+//
+// Open/close is the TESTED infohelp:: transient model (hover OR click opens; the
+// card stays while the pointer is on the button or the card; leaving BOTH arms a
+// short grace close; Esc / popup-close dismiss it). All timing is driven from the
+// popup's modal pump via GetTickCount64() + infohelp::CloseDelayMs(), so it does
+// not depend on the card receiving its own timer messages.
+// ============================================================================
+static const wchar_t kHelpCardClass[] = L"CtrlgNavHelpCard";
+static const UINT_PTR kHelpPumpTimer  = 114;   // wakes the modal pump so the grace-close fires even when the pointer stops moving
+
+// ONE authoritative pass that both MEASURES (paint=false) and PAINTS
+// (paint=true) the scrollable help content, so the measured content height and
+// the drawn content can never disagree ("Overflow and Scrollable Help Card").
+// Returns the total content height in device px. Section headers and dividers
+// get their own typography/spacing; body lines keep their bold key spans AND
+// wrap naturally -- words are placed left-to-right and wrap to the next line
+// when they would cross the content right edge, so long help text never spills
+// out of the card. The caller clips to the viewport and offsets by the scroll.
+static int LayoutHelpContent(HDC hdc, NamePromptData* d, int contentW, bool paint,
+                             int originX, int originY, const ThemePalette& pal) {
+    const UINT dpi = d ? d->dpi : 96u;
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    HFONT body = UiFont(dpi);
+    HFONT bold = UiFontSemibold(dpi);
+    const int bodyLineH     = S(19);
+    const int sectionH      = S(22);
+    const int sectionGapTop = S(10);
+    const int dividerH      = S(13);
+    const int paraGap       = S(3);
+    const int spaceFallback = S(4);
+    const int right = originX + contentW;
+    int y = originY;
+    for (int i = 0; i < infohelp::LineCount(); ++i) {
+        const infohelp::Kind kind = infohelp::LineKind(i);
+        if (kind == infohelp::Kind::Divider) {
+            if (paint) {
+                HPEN dpen = CreatePen(PS_SOLID, 1, pal.cancelBorder);
+                HGDIOBJ opn = SelectObject(hdc, dpen);
+                const int dy = y + dividerH / 2;
+                MoveToEx(hdc, originX, dy, nullptr);
+                LineTo(hdc, right, dy);
+                SelectObject(hdc, opn);
+                DeleteObject(dpen);
+            }
+            y += dividerH;
+            continue;
+        }
+        if (kind == infohelp::Kind::Section) {
+            y += sectionGapTop;
+            if (paint) {
+                SetTextColor(hdc, pal.panelText);
+                HGDIOBJ of = SelectObject(hdc, bold);
+                RECT r = {originX, y, right, y + sectionH};
+                DrawTextW(hdc, infohelp::Line(i), -1, &r,
+                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                SelectObject(hdc, of);
+            }
+            y += sectionH;
+            continue;
+        }
+        int x = originX;
+        bool anyOnLine = false;
+        for (const auto& run : infohelp::ParseRuns(infohelp::Line(i))) {
+            if (run.text.empty()) continue;
+            // fix thse isseue.md (nav-help typography): mono / italic / bold /
+            // body, all Windows-default faces (Consolas for `literal` key
+            // tokens, Segoe UI italic for _hints_, Segoe UI semibold for keys).
+            HFONT f = run.mono   ? UiFontMono(dpi)
+                    : run.italic ? UiFontItalic(dpi)
+                    : run.bold   ? bold
+                    :              body;
+            HGDIOBJ of = SelectObject(hdc, f);
+            const std::wstring& t = run.text;
+            size_t p = 0;
+            while (p < t.size()) {
+                if (t[p] == L' ') {
+                    SIZE spsz = {0, 0};
+                    GetTextExtentPoint32W(hdc, L" ", 1, &spsz);
+                    const int sw = spsz.cx > 0 ? spsz.cx : spaceFallback;
+                    if (anyOnLine) x += sw;
+                    ++p;
+                    continue;
+                }
+                size_t q = p;
+                while (q < t.size() && t[q] != L' ') ++q;
+                const std::wstring word = t.substr(p, q - p);
+                SIZE wsz = {0, 0};
+                GetTextExtentPoint32W(hdc, word.c_str(),
+                                      static_cast<int>(word.size()), &wsz);
+                if (anyOnLine && x + wsz.cx > right) {
+                    x = originX;
+                    y += bodyLineH;
+                    anyOnLine = false;
+                }
+                if (paint) {
+                    SetTextColor(hdc, pal.panelText);
+                    TextOutW(hdc, x, y, word.c_str(), static_cast<int>(word.size()));
+                }
+                x += wsz.cx;
+                anyOnLine = true;
+                p = q;
+            }
+            SelectObject(hdc, of);
+        }
+        y += bodyLineH + paraGap;
+    }
+    return y - originY;
+}
+
+// Paint the rounded, theme-aware help card. The "Navigation help" heading is
+// painted FIXED at the top; the body is drawn into a CLIPPED viewport offset by
+// d->helpScrollY so it scrolls underneath the heading. A theme-aware scrollbar
+// thumb is drawn in the reserved right-edge gutter ONLY when the content
+// overflows (helpscroll::NeedsScroll). Double buffered so scrolling never
+// flashes.
+static void PaintHelpCard(HWND hwnd, HDC targetDC, NamePromptData* d) {
+    RECT rc; GetClientRect(hwnd, &rc);
+    const UINT dpi = d ? d->dpi : 96u;
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    HDC memDC = CreateCompatibleDC(targetDC);
+    HBITMAP bmp = memDC ? CreateCompatibleBitmap(targetDC, w, h) : nullptr;
+    HGDIOBJ oldBmp = (memDC && bmp) ? SelectObject(memDC, bmp) : nullptr;
+    HDC hdc = (memDC && bmp) ? memDC : targetDC;
+
+    const ThemePalette pal = ResolveThemePalette(IsDarkMode());
+    HBRUSH bgBr = CreateSolidBrush(pal.panelBg);
+    FillRect(hdc, &rc, bgBr);
+    DeleteObject(bgBr);
+
+    const int rad = S(8);
+    HBRUSH cardBr = CreateSolidBrush(pal.cardBg);
+    HPEN   pen    = CreatePen(PS_SOLID, 1, pal.cancelBorder);
+    HGDIOBJ ob = SelectObject(hdc, cardBr);
+    HGDIOBJ op = SelectObject(hdc, pen);
+    RoundRect(hdc, rc.left, rc.top, rc.right, rc.bottom, rad, rad);
+    SelectObject(hdc, op);
+    SelectObject(hdc, ob);
+    DeleteObject(cardBr);
+    DeleteObject(pen);
+
+    SetBkMode(hdc, TRANSPARENT);
+    const int padX       = S(16);   // nav-help: match MeasureHelpCard (was 14)
+    const int padTop     = S(14);   // nav-help: match MeasureHelpCard (was 12)
+    const int headingH   = S(20);
+    const int headingGap = S(8);
+    const int padBottom  = S(14);   // nav-help: match MeasureHelpCard (was 12)
+    const int gutterW    = S(listscroll::kScrollbarW + 4);   // nav-help: REUSE the Selected Items thick scrollbar width (matches MeasureHelpCard)
+    const int headingBandH = padTop + headingH + headingGap;
+
+    // Fixed heading -- painted before the clip, so it never scrolls away.
+    SetTextColor(hdc, pal.panelText);
+    HGDIOBJ ofTitle = SelectObject(hdc, UiFontSemibold(dpi));
+    RECT trc = {rc.left + padX, rc.top + padTop,
+                rc.right - padX, rc.top + padTop + headingH};
+    DrawTextW(hdc, infohelp::Heading(), -1, &trc,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    SelectObject(hdc, ofTitle);
+
+    // Scrollable content viewport (heading excluded, gutter reserved on right).
+    const int viewTop    = rc.top + headingBandH;
+    const int viewBottom = rc.bottom - padBottom;
+    const int viewportH  = (viewBottom > viewTop) ? (viewBottom - viewTop) : 0;
+    const int contentX   = rc.left + padX;
+    const int contentW   = (rc.right - padX - gutterW) - contentX;
+    const int scrollY    = d ? d->helpScrollY : 0;
+
+    HRGN clip = CreateRectRgn(contentX, viewTop, rc.right - padX, viewBottom);
+    SelectClipRgn(hdc, clip);
+    LayoutHelpContent(hdc, d, contentW > 0 ? contentW : 1, true,
+                      contentX, viewTop - scrollY, pal);
+    SelectClipRgn(hdc, nullptr);
+    DeleteObject(clip);
+
+    // Theme-aware scrollbar thumb -- shown ONLY when the content overflows.
+    const int contentH = d ? d->helpContentH : 0;
+    if (helpscroll::NeedsScroll(contentH, viewportH)) {
+        const int trackLeft  = rc.right - padX - gutterW + S(2);
+        const int trackRight = rc.right - padX - S(2);
+        const helpscroll::Thumb th = helpscroll::ThumbRect(
+            scrollY, contentH, viewportH, viewportH, S(24));
+        const COLORREF thumbCol = IsDarkMode() ? RGB(165, 165, 165)
+                                               : RGB(96, 96, 96);
+        HBRUSH thumbBr = CreateSolidBrush(thumbCol);
+        HGDIOBJ obT = SelectObject(hdc, thumbBr);
+        HGDIOBJ opT = SelectObject(hdc, GetStockObject(NULL_PEN));
+        const int trad = S(3) * 2;
+        RoundRect(hdc, trackLeft, viewTop + th.y,
+                  trackRight, viewTop + th.y + th.h, trad, trad);
+        SelectObject(hdc, opT);
+        SelectObject(hdc, obT);
+        DeleteObject(thumbBr);
+    }
+
+    if (memDC && bmp) {
+        BitBlt(targetDC, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
+        SelectObject(memDC, oldBmp);
+        DeleteObject(bmp);
+        DeleteDC(memDC);
+    } else if (memDC) {
+        DeleteDC(memDC);
+    }
+}
+
+static LRESULT CALLBACK HelpCardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                        LPARAM lParam) {
+    NamePromptData* d = reinterpret_cast<NamePromptData*>(
+        GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+        case WM_ERASEBKGND:
+            return 1;   // fully painted in WM_PAINT -- no background erase flash
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hwnd, &ps);
+            PaintHelpCard(hwnd, hdc, d);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_MOUSEWHEEL: {
+            // A wheel delivered directly to the card (e.g. "scroll inactive
+            // windows under the pointer") scrolls its content via the tested
+            // helpscroll model and is consumed -- never reflowed anywhere else.
+            if (d) {
+                const int delta =
+                    static_cast<int>(static_cast<short>(HIWORD(wParam)));
+                const int maxScroll =
+                    helpscroll::MaxScroll(d->helpContentH, d->helpViewportH);
+                const int pxPerNotch = ScaleDpi(40, d->dpi);
+                const int ny = helpscroll::OnWheel(d->helpScrollY, delta,
+                                                   pxPerNotch, maxScroll);
+                if (ny != d->helpScrollY) {
+                    d->helpScrollY = ny;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Compact, capped size + scroll bookkeeping ("Overflow and Scrollable Help
+// Card"). Width is the widest single line clamped to a compact band; both
+// dimensions are then capped against the CURRENT monitor work area (DPI-aware
+// -- all values are device px) via helpscroll::CapToWorkArea so the card never
+// grows past the screen as content is added. The content height is measured at
+// the final width (natural wrapping) with the SAME LayoutHelpContent used to
+// paint, the card height is sized from it and capped, and the resulting content
+// viewport height + scroll offset are stored on d so the painter and the wheel
+// handler share one source of truth.
+static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
+    const UINT dpi = d ? d->dpi : 96u;
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    const int padX        = S(16);   // nav-help: a touch more horizontal padding (was 14)
+    const int padTop      = S(14);   // nav-help: a touch more top padding (was 12)
+    const int headingH    = S(20);
+    const int headingGap  = S(8);
+    const int padBottom   = S(14);   // nav-help: a touch more bottom padding (was 12)
+    const int gutterW     = S(listscroll::kScrollbarW + 4);   // nav-help: REUSE the Selected Items thick scrollbar width (kScrollbarW) + a 2px inset each side, so the help thumb matches
+    const int headingBandH = padTop + headingH + headingGap;
+    const int minW        = S(240);
+    const int maxCardW    = S(350);   // nav-help: a little WIDER than before (was 320, +30) for easier reading; the body still wraps to it and never widens with content
+    const int maxCardH    = S(280);   // nav-help: a little TALLER than before (was 240, +40); the full navigation help still scrolls INTERNALLY and the card never grows past this
+    const int margin      = S(16);
+
+    HDC hdc = GetDC(parent);
+    HFONT body = UiFont(dpi);
+    HFONT bold = UiFontSemibold(dpi);
+
+    int maxW = 0;
+    {
+        HGDIOBJ of = SelectObject(hdc, bold);
+        SIZE sz = {0, 0};
+        GetTextExtentPoint32W(hdc, infohelp::Heading(),
+                              lstrlenW(infohelp::Heading()), &sz);
+        if (sz.cx > maxW) maxW = sz.cx;
+        SelectObject(hdc, of);
+    }
+    for (int i = 0; i < infohelp::LineCount(); ++i) {
+        if (infohelp::LineKind(i) == infohelp::Kind::Divider) continue;
+        const bool section = (infohelp::LineKind(i) == infohelp::Kind::Section);
+        int lineW = 0;
+        for (const auto& run : infohelp::ParseRuns(infohelp::Line(i))) {
+            // Measure each run in the SAME face the renderer will draw it with
+            // (mono / italic / bold / body) so the card width accounts for them.
+            HFONT mf = run.mono   ? UiFontMono(dpi)
+                     : run.italic ? UiFontItalic(dpi)
+                     : (run.bold || section) ? bold
+                     :              body;
+            HGDIOBJ of = SelectObject(hdc, mf);
+            SIZE sz = {0, 0};
+            GetTextExtentPoint32W(hdc, run.text.c_str(),
+                                  static_cast<int>(run.text.size()), &sz);
+            lineW += sz.cx;
+            SelectObject(hdc, of);
+        }
+        if (lineW > maxW) maxW = lineW;
+    }
+
+    SIZE out;
+    out.cx = maxW + 2 * padX + gutterW;
+    if (out.cx < minW) out.cx = minW;
+    out.cx = helpscroll::CapToMax(out.cx, maxCardW);
+
+    HMONITOR mon = MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {}; mi.cbSize = sizeof(mi);
+    int workW = 0, workH = 0;
+    if (GetMonitorInfoW(mon, &mi)) {
+        workW = static_cast<int>(mi.rcWork.right - mi.rcWork.left);
+        workH = static_cast<int>(mi.rcWork.bottom - mi.rcWork.top);
+    }
+    if (workW > 0) out.cx = helpscroll::CapToWorkArea(out.cx, workW, margin);
+
+    const int contentW = (out.cx - 2 * padX - gutterW) > 0
+                       ? (out.cx - 2 * padX - gutterW) : 1;
+    const ThemePalette pal = ResolveThemePalette(IsDarkMode());
+    const int contentH =
+        LayoutHelpContent(hdc, d, contentW, false, 0, 0, pal);
+    ReleaseDC(parent, hdc);
+
+    const int desiredH = headingBandH + contentH + padBottom;
+    // fix thse isseue.md P1-4: bound the card to the FIXED maximum FIRST, then
+    // to the monitor work area (the SMALLER of the two always wins), so the card
+    // has a consistent configured maximum and never grows with its content.
+    // Content taller than the resulting viewport scrolls INTERNALLY (helpViewportH
+    // / NeedsScroll below) instead of enlarging the card.
+    int cardH = helpscroll::CapToMax(desiredH, maxCardH);
+    if (workH > 0) cardH = helpscroll::CapToWorkArea(cardH, workH, margin);
+    out.cy = cardH;
+
+    if (d) {
+        d->helpContentH  = contentH;
+        d->helpViewportH = helpscroll::ViewportHeight(cardH, headingBandH, padBottom);
+        d->helpScrollY   = helpscroll::ClampScroll(
+            d->helpScrollY, helpscroll::MaxScroll(contentH, d->helpViewportH));
+    }
+    return out;
+}
+
+static void EnsureHelpCardClass(HINSTANCE hinst) {
+    static bool reg = false;
+    if (reg) return;
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = HelpCardWndProc;
+    wc.hInstance = hinst;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = nullptr;   // painted fully in WM_PAINT
+    wc.lpszClassName = kHelpCardClass;
+    RegisterClassExW(&wc);
+    reg = true;
+}
+
+static void EnsureHelpCard(HWND parent, NamePromptData* d) {
+    if (!d || d->helpCard) return;
+    HINSTANCE hinst = reinterpret_cast<HINSTANCE>(
+        GetWindowLongPtrW(parent, GWLP_HINSTANCE));
+    EnsureHelpCardClass(hinst);
+    d->helpCard = CreateWindowExW(
+        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        kHelpCardClass, L"", WS_POPUP,
+        0, 0, 10, 10, parent, nullptr, hinst, nullptr);
+    if (d->helpCard)
+        SetWindowLongPtrW(d->helpCard, GWLP_USERDATA,
+                          reinterpret_cast<LONG_PTR>(d));
+}
+
+// Anchor the card ABOVE the '?' button, clamped to the monitor work area (fall
+// below the button only if there is not enough room above). Called whenever the
+// popup moves/resizes/maximizes or the DPI changes, so the card tracks it.
+static void PositionHelpCard(HWND parent, NamePromptData* d) {
+    if (!d || !d->helpCard || !d->infoBtn) return;
+    SIZE sz = MeasureHelpCard(parent, d);
+    RECT btn; GetWindowRect(d->infoBtn, &btn);   // screen coords
+    const int gap = ScaleDpi(6, d->dpi);
+    int x = btn.left;
+    int y = btn.top - gap - sz.cy;                // prefer above the button
+    HMONITOR mon = MonitorFromWindow(parent, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {}; mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(mon, &mi)) {
+        if (x + sz.cx > mi.rcWork.right)  x = mi.rcWork.right - sz.cx;
+        if (x < mi.rcWork.left)           x = mi.rcWork.left;
+        if (y < mi.rcWork.top)            y = btn.bottom + gap;   // not enough room above
+        if (y + sz.cy > mi.rcWork.bottom) y = mi.rcWork.bottom - sz.cy;
+    }
+    SetWindowPos(d->helpCard, HWND_TOPMOST, x, y, sz.cx, sz.cy, SWP_NOACTIVATE);
+}
+
+static void ShowHelpCard(HWND parent, NamePromptData* d) {
+    if (!d || !d->isGroup) return;
+    EnsureHelpCard(parent, d);
+    if (!d->helpCard) return;
+    d->helpVis = static_cast<int>(infohelp::Vis::Shown);
+    d->helpCloseAtTick = 0;
+    d->helpScrollY = 0;                           // always open scrolled to the top
+    PositionHelpCard(parent, d);
+    ShowWindow(d->helpCard, SW_SHOWNOACTIVATE);   // never steals folder-name focus
+    InvalidateRect(d->helpCard, nullptr, FALSE);
+    SetTimer(parent, kHelpPumpTimer, 60, nullptr);  // drive the grace-close poll
+}
+
+static void HideHelpCard(HWND parent, NamePromptData* d) {
+    if (!d) return;
+    d->helpVis = static_cast<int>(infohelp::Vis::Hidden);
+    d->helpCloseAtTick = 0;
+    if (d->helpCard) ShowWindow(d->helpCard, SW_HIDE);
+    KillTimer(parent, kHelpPumpTimer);
+}
+
 static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                           LPARAM lParam) {
     NamePromptData* d = reinterpret_cast<NamePromptData*>(
@@ -7864,13 +9161,15 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 SendMessageW(d->destCopyBtn, WM_SETFONT,
                              reinterpret_cast<WPARAM>(font), TRUE);
 
-                // fix thse isseue.md UI-03 / UI-06: a REAL footer INFO/help button
-                // (id 121), painted by the SAME themed BS_OWNERDRAW renderer as
-                // Copy/Cancel, plus a dedicated SS_OWNERDRAW help PANEL (id 122)
-                // that overlays the Selected Items area when the button is
-                // clicked. The panel starts HIDDEN; WM_COMMAND id 121 toggles it
-                // through the tested infohelp open/close model, so the help is a
-                // working UI feature -- not merely the infohelp helper functions.
+                // fix thse isseue.md Issue 1: a REAL footer '?' navigation-help
+                // button (id 121), painted GREEN with a bold white "?" by the
+                // themed BS_OWNERDRAW renderer. Its window text is the accessible
+                // name "Navigation help" (the glyph is drawn separately). It no
+                // longer owns a large child overlay: the help itself is a SEPARATE
+                // non-activating popup window (d->helpCard, class kHelpCardClass)
+                // created on demand by EnsureHelpCard(), so the Selected Items
+                // list repaint can never paint over it. Hover OR click opens the
+                // card through the tested infohelp:: transient model (NO pin).
                 d->infoBtn = CreateWindowExW(0, L"BUTTON", L"?",
                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                                 S(L.infoButton.x), S(L.infoButton.y),
@@ -7878,16 +9177,9 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 hwnd, reinterpret_cast<HMENU>(121), hinst, nullptr);
                 SendMessageW(d->infoBtn, WM_SETFONT,
                              reinterpret_cast<WPARAM>(font), TRUE);
-                // fix thse isseue.md v0.12.65 Bug 2: WS_CLIPSIBLINGS so the OS
-                // honours this panel's Z order against the overlapping Selected
-                // Items list (id 110). Without it the list repainted straight
-                // over the just-shown panel -- the "? flashes then disappears".
-                // It is brought to the top of the sibling order on each click.
-                d->helpPanel = CreateWindowExW(0, L"STATIC", L"",
-                                WS_CHILD | WS_CLIPSIBLINGS | SS_OWNERDRAW,
-                                S(L.selectedContent.x), S(L.selectedContent.y),
-                                S(L.selectedContent.w), S(L.selectedContent.h),
-                                hwnd, reinterpret_cast<HMENU>(122), hinst, nullptr);
+                // Accessible name for screen readers / tooltips (the owner-draw
+                // paints the "?" glyph, not this text).
+                SetWindowTextW(d->infoBtn, infohelp::AccessibleName());
 
                 // fix thse isseue.md #1: the Status card (state icon + label +
                 // progress track) was removed; the Group popup no longer has a
@@ -8677,43 +9969,11 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // the SAME tested listscroll:: + mode:: model, so wheel/keys page
             // through a large selection; sel:: formats each cell. HONEST: only
             // the rows currently in the viewport are drawn.
-            if (dis->CtlType == ODT_STATIC && dis->CtlID == 122 && d) {
-                // fix thse isseue.md UI-03 / UI-06: the themed help PANEL. Painted
-                // only while shown/pinned (the WM_COMMAND id-121 toggle calls
-                // ShowWindow). Renders the summarized infohelp lines over the
-                // card surface using the SAME palette + fonts as the rest of the
-                // popup, so help reads clearly in both light and dark themes.
-                HDC hdc = dis->hDC;
-                RECT rc = dis->rcItem;
-                const UINT dpi = d->dpi;
-                auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
-                const ThemePalette pal = ResolveThemePalette(IsDarkMode());
-                HBRUSH cardBrush = CreateSolidBrush(pal.cardBg);
-                FillRect(hdc, &rc, cardBrush);
-                DeleteObject(cardBrush);
-                HBRUSH frame = CreateSolidBrush(pal.cancelBorder);
-                FrameRect(hdc, &rc, frame);
-                DeleteObject(frame);
-                SetBkMode(hdc, TRANSPARENT);
-                const int padX = S(14);
-                int ty = rc.top + S(12);
-                SetTextColor(hdc, pal.panelText);
-                HGDIOBJ ofTitle = SelectObject(hdc, UiFontSemibold(dpi));
-                RECT trc = {rc.left + padX, ty, rc.right - padX, ty + S(20)};
-                DrawTextW(hdc, infohelp::AccessibleName(), -1, &trc,
-                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-                SelectObject(hdc, ofTitle);
-                ty += S(26);
-                HGDIOBJ ofBody = SelectObject(hdc, UiFont(dpi));
-                for (int i = 0; i < infohelp::LineCount(); ++i) {
-                    RECT lrc = {rc.left + padX, ty, rc.right - padX, ty + S(20)};
-                    DrawTextW(hdc, infohelp::Line(i), -1, &lrc,
-                              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-                    ty += S(22);
-                }
-                SelectObject(hdc, ofBody);
-                return TRUE;
-            }
+            // fix thse isseue.md Issue 1: the old large help overlay (id 122,
+            // an SS_OWNERDRAW child sized to L.selectedContent that replaced the
+            // Selected Items list) is REMOVED. Navigation help now renders in a
+            // separate non-activating popup window (HelpCardWndProc), so it can
+            // never cover the item list and the list repaint can never erase it.
             if (dis->CtlType == ODT_STATIC && dis->CtlID == 110 && d) {
                 RECT rc = dis->rcItem;
                 // fix thse isseue.md #2: DOUBLE-BUFFER the whole list paint into
@@ -8768,6 +10028,16 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // start at the same offset, so no card below moves.
                 const int kSelHdrTop = 0;      // #3: 20px top padding is the selectedContent inset, not here
                 const int kSelHdrGap = S(4);   // even gap around each element (fix thse isseue.md #3: 4px rhythm, was S(3))
+                // fix thse isseue.md v0.12.67 (Issue #1): the TITLE band is a
+                // FIXED height (kSelTitleH), NOT the item rowH. In Large / Extra
+                // large modes rowH is the grid icon height (64..272px), and the
+                // header previously used it for the title row -- that ballooned
+                // the band and pushed the chips, divider and rows far down (the
+                // "excessive space above the title / between title and chips"
+                // defect). kSelTitleH mirrors the ComputePromptLayout header
+                // rhythm exactly, so paint and geometry agree; List mode is
+                // byte-identical (viewmode::RowHeight(List) == 24 == kSelTitleH).
+                const int titleH = S(layout::kSelTitleH);
                 int y = rc.top + kSelHdrTop;
 
                 // Level 1 -- title "Selected items (N)" with the Windows-native
@@ -8784,20 +10054,20 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // it; the title text start (left + kSectionIconCol) is unchanged.
                 {
                     RECT selIcoR = {left, y, left + S(layout::kSectionIconCol),
-                                    y + rowH};
+                                    y + titleH};
                     DrawTextW(hdc, L"\U0001F5C2\uFE0F", -1, &selIcoR,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
                 }
                 std::wstring title = sel::SummaryTitle(d->items.size());
                 RECT tr = {left + S(layout::kSectionIconCol), y,
-                           right, y + rowH};
+                           right, y + titleH};
                 // S14: the Selected-items heading in the heavier semibold face;
                 // restore the regular font for the breakdown + rows below.
                 HGDIOBJ semiSel = SelectObject(hdc, UiFontSemibold(dpi));
                 DrawTextW(hdc, title.c_str(), -1, &tr,
                           DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
                 SelectObject(hdc, semiSel);
-                y += rowH;
+                y += titleH;   // fix thse isseue.md v0.12.67: FIXED title height, not grid rowH
                 y += S(layout::kSelTitleChipGap);   // fix thse isseue.md #1: 6px title -> chip row
 
                 // Level 2 -- the interactive summary chip strip (fix thse
@@ -9060,21 +10330,15 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 // label band). Feeding rowH for a grid would overcount how many
                 // cells fit and clip the last visible row; CellH keeps layout,
                 // paint and scroll in one geometry model.
-                const int capRowH = viewmode::IsGrid(vmode)
-                    ? S(viewmode::CellH(vmode))
-                    : rowH;
-                const int visRows = listscroll::EffectiveVisibleRows(
-                    mode::VisibleRows(lm), rc.bottom - rowsTop, capRowH);
-                d->listVisibleRows = visRows;
-                // fix thse isseue.md Phase 2: Large / Extra large are REAL
-                // responsive icon grids, not one tall row per item. Feed the
-                // shared listscroll:: model GRID ROWS (not the item count) so a
-                // scroll "row" IS a grid row: the visible range, overflow test,
-                // thumb and wheel/key paging all operate per grid row. selCols
-                // comes from the live viewport width (the scrollbar gutter is
-                // reserved up front so the column count stays stable) and is
-                // cached on the popup so the modal-loop scroll handlers page by
-                // whole grid rows too. List mode is unchanged (selCols == 1).
+                // fix thse isseue.md Phase 2 + v0.12.68 #1: Large / Extra large
+                // are REAL responsive icon grids. selCols comes from the live
+                // viewport width (the scrollbar gutter is reserved up front so
+                // the column count stays stable) and is cached so the modal-loop
+                // scroll handlers page by whole grid rows too. The grid row count
+                // is viewmode::SelectedGridVisibleRows -- WHOLE cells only AND
+                // never fewer than one, so a viewport too short for a full cell
+                // can NEVER paint a blank grid. List keeps the physical-capacity
+                // reconciliation (EffectiveVisibleRows). selCols == 1 in List.
                 const bool gridMode = viewmode::IsGrid(vmode);
                 const int gridGutter =
                     S(listscroll::kScrollbarW) + S(listscroll::kMetaScrollGap);
@@ -9082,9 +10346,29 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     ? viewmode::Columns(vmode, (right - left) - gridGutter)
                     : 1;
                 d->selGridCols = selCols;
+                const int rowsViewportH = rc.bottom - rowsTop;
+                const int capRowH = gridMode ? S(viewmode::CellH(vmode)) : rowH;
+                const int visRows = gridMode
+                    ? viewmode::SelectedGridVisibleRows(
+                          vmode, itemCount, selCols, rowsViewportH)
+                    : listscroll::EffectiveVisibleRowsResizable(
+                          mode::VisibleRows(lm), rowsViewportH, capRowH,
+                          (d->manualSized || IsZoomed(hwnd)));   // fix thse isseue.md v0.12.69 #2: a maximized/resized List fills the viewport (no 4/9-row dead space); preferred keeps its cap
+                d->listVisibleRows = visRows;
                 const int scrollRows = gridMode
                     ? viewmode::GridRows(itemCount, selCols)
                     : itemCount;
+                // v0.12.68 #2: a pending view switch converts the captured first
+                // visible item into THIS mode's top row now that selCols/visRows
+                // are known, clamped to the valid maximum -- so the user's visible
+                // context survives the zoom (both List->grid and grid->List).
+                if (d->pendingFirstItem >= 0) {
+                    const int convTop = viewmode::TopRowForItem(
+                        vmode, d->pendingFirstItem, selCols);
+                    d->listTopRow = listscroll::ClampTopRow(
+                        convTop, listscroll::MaxTopRow(scrollRows, visRows));
+                    d->pendingFirstItem = -1;
+                }
                 const listscroll::Range vr = listscroll::VisibleRange(
                     d->listTopRow, scrollRows, visRows);
                 // fix thse isseu e.md #4: reserve a right-edge gutter for a
@@ -9132,6 +10416,14 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     const chipfilter::Row rowFilt =
                         chipfilter::RowFor(chipState, rowExtKey, it.isFolder);
                     const bool rowSubdued = (rowFilt == chipfilter::Row::Subdued);
+                    // fix thse isseue.md Phase 5 + ADD-ON: outline the CURRENT
+                    // find-navigation match (List row) with the accent, leaving
+                    // every OTHER matched row at full strength so the user can
+                    // see where they are without losing the other matches.
+                    if (chipnav::IsCurrentMatch(vr.first + r, d->chipNavItem)) {
+                        const RECT mr = {left, y + S(1), rowRight, y + rowH - S(1)};
+                        icons::DrawCurrentMatchOutline(hdc, mr, pal.createBorder);
+                    }
                     const COLORREF rowNameColor = rowSubdued
                         ? RGB(hovertint::BlendChannel(GetRValue(pal.panelText), GetRValue(pal.cardBg), 55),
                               hovertint::BlendChannel(GetGValue(pal.panelText), GetGValue(pal.cardBg), 55),
@@ -9168,7 +10460,39 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     // never upscale a small bitmap. The extracted HICON is cached
                     // per (type,tier,dpi) on the popup (GetCachedShellIcon), so
                     // scrolling and zooming reuse ONE source and teardown frees them.
-                    HICON shIcon = viewmode::IsGrid(vmode)
+                    // fix thse isseue.md Issue 2: in a grid view, an IMAGE file
+                    // shows a real thumbnail preview (async, cached) instead of
+                    // its type icon. Non-image files, folders and List view keep
+                    // the Shell icon. The thumbnail is aspect-fit (never
+                    // stretched) and centered in the icon box; while it is still
+                    // loading (or if it fails) the icon fallback below is drawn.
+                    bool drewThumb = false;
+                    if (viewmode::IsGrid(vmode) && !it.path.empty() &&
+                        thumbs::WantsThumbnailFor(true, it.isFolder, it.name)) {
+                        int tw = 0, th = 0;
+                        HBITMAP tb =
+                            GetThumbnailForPaint(d, hwnd, it.path, shPx, &tw, &th);
+                        if (tb && tw > 0 && th > 0) {
+                            const int iw = icr.right - icr.left;
+                            const int ih = icr.bottom - icr.top;
+                            const int boxX = icr.left + (iw - shPx) / 2;
+                            const int boxY = icr.top  + (ih - shPx) / 2;
+                            const thumbs::FitBox fb = thumbs::FitRect(tw, th, shPx, shPx);
+                            HDC mdc = CreateCompatibleDC(hdc);
+                            if (mdc) {
+                                HGDIOBJ omb = SelectObject(mdc, tb);
+                                const int oldStretch = SetStretchBltMode(hdc, HALFTONE);
+                                SetBrushOrgEx(hdc, 0, 0, nullptr);
+                                StretchBlt(hdc, boxX + fb.x, boxY + fb.y, fb.w, fb.h,
+                                           mdc, 0, 0, tw, th, SRCCOPY);
+                                SetStretchBltMode(hdc, oldStretch);
+                                SelectObject(mdc, omb);
+                                DeleteDC(mdc);
+                                drewThumb = true;
+                            }
+                        }
+                    }
+                    HICON shIcon = (!drewThumb && viewmode::IsGrid(vmode))
                         ? GetCachedShellIcon(d, it.name, it.isFolder,
                                              iconsrc::SelectTier(vmode, d->dpi))
                         : nullptr;
@@ -9286,6 +10610,16 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                             const bool gSub =
                                 chipfilter::RowFor(chipState, gExtKey, git.isFolder)
                                     == chipfilter::Row::Subdued;
+                            // fix thse isseue.md Phase 5 + ADD-ON: outline the
+                            // CURRENT find-navigation match CELL (Large / Extra
+                            // large) with the accent, leaving the other matched
+                            // cells at full strength.
+                            if (chipnav::IsCurrentMatch(itemIdx, d->chipNavItem)) {
+                                const RECT mcr = {cellLeft + S(2), cellTop + S(2),
+                                                  cellLeft + cellW - S(2),
+                                                  cellTop + cellH - S(2)};
+                                icons::DrawCurrentMatchOutline(hdc, mcr, pal.createBorder);
+                            }
                             const COLORREF gName = gSub
                                 ? RGB(hovertint::BlendChannel(GetRValue(pal.panelText), GetRValue(pal.cardBg), 55),
                                       hovertint::BlendChannel(GetGValue(pal.panelText), GetGValue(pal.cardBg), 55),
@@ -9295,13 +10629,56 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                             const int ix = cellLeft + (cellW - gIconPx) / 2;
                             const int iy = cellTop + S(4);
                             RECT gicr = {ix, iy, ix + gIconPx, iy + gIconPx};
-                            HICON gIcon = GetCachedShellIcon(
-                                d, git.name, git.isFolder,
-                                iconsrc::SelectTier(vmode, d->dpi));
+                            // fix thse isseue.md v0.12.67 (Issue #2): in the
+                            // GRID modes an IMAGE file shows a REAL async
+                            // thumbnail preview (cached) in the cell's icon box.
+                            // This is the ACTUAL grid renderer -- the previous
+                            // build only ever called GetCachedShellIcon here, so
+                            // the thumbnail pipeline (worker + cache + repaint,
+                            // all already present) never reached the screen and
+                            // every image fell back to its generic Shell icon.
+                            // Non-image files, folders and List view keep the
+                            // Shell icon. The thumbnail is aspect-fit (never
+                            // stretched) and centered in the gIconPx box; while
+                            // it is still loading (or if extraction genuinely
+                            // fails) the crisp Shell-icon fallback below is drawn.
+                            // Async completion posts WM_APP_THUMB_READY, which
+                            // invalidates control 110 so the cell repaints.
+                            bool gDrewThumb = false;
+                            if (!git.isFolder && !git.path.empty() &&
+                                thumbs::WantsThumbnailFor(true, git.isFolder,
+                                                          git.name)) {
+                                int gtw = 0, gth = 0;
+                                HBITMAP gtb = GetThumbnailForPaint(
+                                    d, hwnd, git.path, gIconPx, &gtw, &gth);
+                                if (gtb && gtw > 0 && gth > 0) {
+                                    const thumbs::FitBox gfb =
+                                        thumbs::FitRect(gtw, gth, gIconPx, gIconPx);
+                                    HDC gmdc = CreateCompatibleDC(hdc);
+                                    if (gmdc) {
+                                        HGDIOBJ gomb = SelectObject(gmdc, gtb);
+                                        const int goldStretch =
+                                            SetStretchBltMode(hdc, HALFTONE);
+                                        SetBrushOrgEx(hdc, 0, 0, nullptr);
+                                        StretchBlt(hdc, ix + gfb.x, iy + gfb.y,
+                                                   gfb.w, gfb.h, gmdc, 0, 0,
+                                                   gtw, gth, SRCCOPY);
+                                        SetStretchBltMode(hdc, goldStretch);
+                                        SelectObject(gmdc, gomb);
+                                        DeleteDC(gmdc);
+                                        gDrewThumb = true;
+                                    }
+                                }
+                            }
+                            HICON gIcon = (!gDrewThumb)
+                                ? GetCachedShellIcon(
+                                      d, git.name, git.isFolder,
+                                      iconsrc::SelectTier(vmode, d->dpi))
+                                : nullptr;
                             if (gIcon) {
                                 DrawIconEx(hdc, ix, iy, gIcon, gIconPx, gIconPx,
                                            0, nullptr, DI_NORMAL);
-                            } else {
+                            } else if (!gDrewThumb) {
                                 icons::DrawIcon(hdc,
                                                 git.isFolder ? icons::IconId::Folder
                                                              : icons::IconId::File,
@@ -9391,7 +10768,20 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // Once Enabled it shows the plain "Auto Group" caption. The state is
             // read fresh from the monotonic clock so it matches WM_TIMER exactly.
             if (dis->CtlType == ODT_BUTTON && dis->CtlID == 120 && d) {
-                HDC hdc = dis->hDC;
+                // fix thse isseue.md Issue 7: DOUBLE-BUFFER the Auto Group button.
+                // It composites OFF-SCREEN (panel fill -> rounded surface ->
+                // countdown) and reaches the control in ONE BitBlt, so a
+                // whole-second repaint never briefly shows the panel background
+                // between the full-rect fill and the rounded button -- which was
+                // the per-second flash. A child button's rcItem is {0,0,w,h}, so
+                // the backbuffer shares the control's paint coordinate space.
+                HDC realDC = dis->hDC;
+                const int bbW = dis->rcItem.right - dis->rcItem.left;
+                const int bbH = dis->rcItem.bottom - dis->rcItem.top;
+                HDC memDC = CreateCompatibleDC(realDC);
+                HBITMAP memBmp = memDC ? CreateCompatibleBitmap(realDC, bbW, bbH) : nullptr;
+                HGDIOBJ oldMemBmp = (memDC && memBmp) ? SelectObject(memDC, memBmp) : nullptr;
+                HDC hdc = (memDC && memBmp) ? memDC : realDC;
                 const bool pressed = (dis->itemState & ODS_SELECTED) != 0;
                 const UINT dpi = d->dpi;
                 const int rad = ScaleDpi(14, dpi);
@@ -9472,6 +10862,20 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     DrawTextW(hdc, L"Auto Group", -1, &rc,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                     SelectObject(hdc, of);
+                }
+                // fix thse isseue.md Issue 7: flush the fully-composed button to
+                // the control in ONE BitBlt (no panel-background frame between
+                // the fill and the rounded surface), then tear the backbuffer
+                // down. If the backbuffer could not be created we painted
+                // straight to the control DC, so only clean up the DC.
+                if (memDC && memBmp) {
+                    BitBlt(realDC, dis->rcItem.left, dis->rcItem.top, bbW, bbH,
+                           memDC, 0, 0, SRCCOPY);
+                    SelectObject(memDC, oldMemBmp);
+                    DeleteObject(memBmp);
+                    DeleteDC(memDC);
+                } else if (memDC) {
+                    DeleteDC(memDC);
                 }
                 return TRUE;
             }
@@ -9559,6 +10963,15 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     fill = pressed ? pal.cancelFillPressed : pal.cancelFill;
                     txt = pal.cancelText;
                     border = pal.cancelBorder;
+                    // fix thse isseue.md Issue 1: the '?' navigation-help button
+                    // (id 121) is a GREEN pill with a bold white glyph instead of
+                    // the neutral Cancel styling. The hover tint below lightens
+                    // this green for clear hover feedback.
+                    if (dis->CtlID == 121) {
+                        fill   = pressed ? kColConfirmPressed : kColConfirm;
+                        txt    = kColWhite;
+                        border = kColConfirmPressed;
+                    }
                 }
 
                 // fix thse isseue.md #14: HOVER feedback. The caption buttons
@@ -9747,6 +11160,14 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                           : segmented::Seg::Move);
                     DrawTextW(hdc, segMnemonic.c_str(), -1, &tr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                } else if (dis->CtlID == 121) {
+                    // fix thse isseue.md Issue 1: a bold white "?" glyph on the
+                    // green navigation-help button -- NOT the window text (which
+                    // is the accessible name "Navigation help").
+                    HGDIOBJ ofq = SelectObject(hdc, UiFontSemibold(dpi));
+                    DrawTextW(hdc, L"?", -1, &rc,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+                    SelectObject(hdc, ofq);
                 } else {
                     DrawTextW(hdc, caption, -1, &rc,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -9841,24 +11262,16 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     GroupDestinationFieldText(d->destPath, d->effectiveDest, d->lastTarget));
                 return 0;
             }
-            // fix thse isseue.md UI-03 / UI-06: the footer INFO/help button
-            // (id 121) toggles the themed help panel through the TESTED infohelp
-            // click-to-pin model (OnClick: Hidden/Shown -> Pinned, Pinned ->
-            // Hidden), so a second click explicitly dismisses it. Hover-less
-            // users get a persistent popup; it never steals focus from the
-            // folder-name edit (SW_SHOWNOACTIVATE), and it is kept above the list.
+            // fix thse isseue.md Issue 1: the '?' navigation-help button
+            // (id 121) OPENS the transient help card through the TESTED infohelp
+            // model (OnClick always -> Shown; it is NOT a pin/unpin toggle). The
+            // card is a separate non-activating popup, so it never steals focus
+            // from the folder-name edit; it hides again when the pointer leaves
+            // both the button and the card (grace timer) or on Esc/popup-close.
             if (id == 121 && d && d->isGroup) {
                 d->helpVis = static_cast<int>(
                     infohelp::OnClick(static_cast<infohelp::Vis>(d->helpVis)));
-                const bool show =
-                    d->helpVis != static_cast<int>(infohelp::Vis::Hidden);
-                if (d->helpPanel) {
-                    ShowWindow(d->helpPanel, show ? SW_SHOWNOACTIVATE : SW_HIDE);
-                    if (show) {
-                        BringWindowToTop(d->helpPanel);
-                        InvalidateRect(d->helpPanel, nullptr, TRUE);
-                    }
-                }
+                ShowHelpCard(hwnd, d);
                 return 0;
             }
             // Copy | Move segments (Phase 6/D, Group only): clicking id 107
@@ -10077,30 +11490,71 @@ static LRESULT CALLBACK NamePromptWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 const int cw = rc.right - rc.left;
                 const int ch = rc.bottom - rc.top;
                 if (cw > 0 && ch > 0) {
-                    const int ddpi = static_cast<int>(d->dpi ? d->dpi : 96);
-                    // client (device) px -> 96-dpi DESIGN px (inverse of ScaleDpi)
-                    // for the pure, DPI-free reflow transform.
-                    layout::PromptLayout base = layout::ComputePromptLayout(
-                        d->isGroup, d->expanded,
-                        static_cast<int>(d->items.size()));
-                    layout::PromptLayout reflowed = layout::ReflowToClient(
-                        base, MulDiv(cw, 96, ddpi), MulDiv(ch, 96, ddpi),
-                        winresize::MinClientW(), winresize::MinClientH());
+                    // fix thse isseue.md Phase 2: route the resize/maximize
+                    // relayout through the SINGLE authoritative, MODE-AWARE
+                    // ComputeEffectiveLayout. It grid-sizes the Selected card to
+                    // the current view mode's WHOLE cells and reflows into the
+                    // live client rect with that cell height + whole-cell cap.
+                    // The old inline ComputePromptLayout + ReflowToClient here
+                    // bypassed the mode-aware calc and supplied a List-based
+                    // (24px row) override that clipped grid cells on resize and
+                    // maximize -- the exact Phase 2 defect.
+                    layout::PromptLayout reflowed = ComputeEffectiveLayout(hwnd, d);
                     ApplyPromptLayout(hwnd, d, &reflowed);
                 }
+                // fix thse isseue.md Issue 1: keep the navigation-help card
+                // anchored to the '?' button as the popup resizes / maximizes.
+                if (d && d->helpCard && IsWindowVisible(d->helpCard))
+                    PositionHelpCard(hwnd, d);
+                // fix thse isseue.md Issue 6: remember this size + maximize state
+                // for the next Ctrl+G open (the NORMAL rect is captured only
+                // while NOT zoomed, so a maximize never overwrites it).
+                RememberGroupPlacement(hwnd, d);
                 return 0;
             }
             break;
         }
-        case WM_EXITSIZEMOVE: {
-            // fix thse isseue.md UI-05: the user finished dragging the resize
-            // frame. Latch manualSized so (a) this and future size changes take
-            // the reflow path above and (b) the Ctrl+E density toggle no longer
-            // snaps the window back to the preferred size (it preserves the
-            // user's chosen dimensions). Then reflow once into the final rect.
+        case WM_ENTERSIZEMOVE: {
+            // fix thse isseue.md v0.12.67 (top note): latch the client size at
+            // the START of a move/resize drag so WM_EXITSIZEMOVE can tell a pure
+            // MOVE (dragging the popup by its custom header) from a real RESIZE.
             if (d && d->isGroup) {
-                d->manualSized = true;
-                SendMessageW(hwnd, WM_SIZE, SIZE_RESTORED, 0);
+                RECT rc{};
+                GetClientRect(hwnd, &rc);
+                d->sizeMoveClientW = rc.right - rc.left;
+                d->sizeMoveClientH = rc.bottom - rc.top;
+                d->inSizeMove = true;
+            }
+            break;
+        }
+        case WM_EXITSIZEMOVE: {
+            // fix thse isseue.md UI-05 + v0.12.67 (top note): the user finished
+            // dragging. ONLY a genuine size change takes the reflow/relayout
+            // path -- latch manualSized so (a) this and future size changes take
+            // the reflow path above and (b) the Ctrl+E density toggle no longer
+            // snaps the window back to the preferred size, then reflow once into
+            // the final rect. A pure MOVE (drag by the custom header, no size
+            // change) must NOT reflow: the old code unconditionally set
+            // manualSized and sent WM_SIZE, which repositioned EVERY child and
+            // repainted, so dragging the popup by its header flashed /
+            // re-rendered the entire window. A move now only remembers the new
+            // position (Issue 6) -- no manualSized latch, no WM_SIZE, no flash.
+            if (d && d->isGroup) {
+                RECT rc{};
+                GetClientRect(hwnd, &rc);
+                const int cw = rc.right - rc.left;
+                const int ch = rc.bottom - rc.top;
+                const bool resized =
+                    !d->inSizeMove ||
+                    cw != d->sizeMoveClientW || ch != d->sizeMoveClientH;
+                d->inSizeMove = false;
+                if (resized) {
+                    d->manualSized = true;
+                    SendMessageW(hwnd, WM_SIZE, SIZE_RESTORED, 0);
+                }
+                // fix thse isseue.md Issue 6: a drag-move or drag-resize just
+                // finished -- remember the new NORMAL size/position either way.
+                RememberGroupPlacement(hwnd, d);
             }
             break;
         }
@@ -10354,6 +11808,13 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
         return false;
     }
 
+    // fix thse isseue.md Issue 6: restore the remembered NORMAL size/position
+    // onto the nearest monitor's work area before the popup is shown (clamped so
+    // it is always visible). A maximized state is re-applied just after
+    // ShowWindow below. With NO saved preference the default compact/expanded
+    // centering computed above is kept. New Folder is never remembered.
+    ApplyRememberedNormalPlacement(hwnd, &data);
+
     // fix thse isseue.md #1/#2: capture the EXPLICIT, HRESULT-checked backdrop
     // result (BOTH the DwmSetWindowAttribute AND the DwmExtendFrameIntoClientArea
     // HRESULTs) instead of a single ambiguous bool that assumed success.
@@ -10397,6 +11858,13 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                                                            : L"SolidTheme");
 
     ShowWindow(hwnd, SW_SHOW);
+    // fix thse isseue.md Issue 6: if the last session state was maximized, open
+    // maximized. The remembered NORMAL rect applied above is what SW_RESTORE
+    // returns to, so maximize never destroys the restore size.
+    if (data.isGroup && GroupPlacementMaximized()) {
+        data.manualSized = true;
+        ShowWindow(hwnd, SW_MAXIMIZE);
+    }
     if (!SetForegroundWindow(hwnd)) {
         // Foreground-lock can refuse this; SetFocus below still gives the edit
         // keyboard focus within our (enabled) window, so the prompt is usable.
@@ -10451,6 +11919,64 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                 if (data.cancelBtn)  InvalidateRect(data.cancelBtn,  nullptr, TRUE);
                 if (data.segCopyBtn) InvalidateRect(data.segCopyBtn, nullptr, FALSE);
                 if (data.segMoveBtn) InvalidateRect(data.segMoveBtn, nullptr, FALSE);
+            }
+        }
+        // fix thse isseue.md Issue 2: a background image thumbnail finished ->
+        // repaint the Selected Items list WITHOUT erasing (no flash); the OS
+        // coalesces bursts into one paint. Never changes layout or selection.
+        if (msg.hwnd == hwnd && msg.message == WM_APP_THUMB_READY) {
+            if (data.groupInfo) InvalidateRect(data.groupInfo, nullptr, FALSE);
+            continue;
+        }
+        // fix thse isseue.md Issue 1: Escape dismisses the transient navigation
+        // help card FIRST (the help surface owns the interaction while shown);
+        // the popup itself is only cancelled by a later Esc once the card is
+        // gone. infohelp::OnDismiss is the tested transition.
+        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE && data.isGroup &&
+            data.helpVis != static_cast<int>(infohelp::Vis::Hidden)) {
+            data.helpVis = static_cast<int>(
+                infohelp::OnDismiss(static_cast<infohelp::Vis>(data.helpVis)));
+            HideHelpCard(hwnd, &data);
+            continue;
+        }
+        // fix thse isseue.md Issue 1: transient navigation-help card hover.
+        // Poll the pointer against the '?' button and the card every pump
+        // (kHelpPumpTimer also wakes the loop while shown so the grace-close
+        // still fires when the pointer stops moving). Hover opens the card; the
+        // card stays while the pointer is on EITHER surface; leaving BOTH arms a
+        // short grace-close (infohelp::CloseDelayMs). The decisions are the
+        // tested infohelp:: predicates -- the pump only maps them to the window.
+        if (data.isGroup && data.infoBtn) {
+            POINT hp; GetCursorPos(&hp);
+            RECT br; GetWindowRect(data.infoBtn, &br);
+            const bool onBtn = PtInRect(&br, hp) != FALSE;
+            bool onCard = false;
+            if (data.helpCard && IsWindowVisible(data.helpCard)) {
+                RECT cr; GetWindowRect(data.helpCard, &cr);
+                onCard = PtInRect(&cr, hp) != FALSE;
+            }
+            data.helpPtrOnBtn  = onBtn;
+            data.helpPtrOnCard = onCard;
+            const infohelp::Vis cur = static_cast<infohelp::Vis>(data.helpVis);
+            if (onBtn && cur == infohelp::Vis::Hidden) {
+                data.helpVis = static_cast<int>(infohelp::OnHoverEnter(cur));
+                ShowHelpCard(hwnd, &data);
+            } else if (cur == infohelp::Vis::Shown) {
+                if (infohelp::StaysOpen(cur, onBtn, onCard)) {
+                    data.helpCloseAtTick = 0;   // on a surface -> cancel pending close
+                } else if (infohelp::ShouldArmClose(cur, onBtn, onCard)) {
+                    const unsigned long long now = GetTickCount64();
+                    if (data.helpCloseAtTick == 0) {
+                        data.helpCloseAtTick =
+                            now + static_cast<unsigned long long>(infohelp::CloseDelayMs());
+                    } else if (now >= data.helpCloseAtTick) {
+                        if (infohelp::OnCloseTimer(cur, onBtn, onCard) ==
+                            infohelp::Vis::Hidden) {
+                            HideHelpCard(hwnd, &data);
+                        }
+                        data.helpCloseAtTick = 0;
+                    }
+                }
             }
         }
         if (msg.hwnd == nullptr && msg.message == WM_APP) {
@@ -10565,7 +12091,11 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                         }
                     }
                     if (hitIdx >= 0) {
-                        chipfilter::State cs = ChipStateFrom(&data);
+                        // Capture the PRIOR filter BEFORE activating the new one
+                        // so find-navigation can tell a fresh activation from a
+                        // re-click of the already-active extension chip.
+                        const chipfilter::State prev = ChipStateFrom(&data);
+                        chipfilter::State cs = prev;
                         const int k = data.chipHitKind[hitIdx];
                         if (k == 2) chipfilter::ActivateFolders(cs);
                         else if (k == 3) chipfilter::ActivateNoExt(cs);
@@ -10573,6 +12103,39 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                         else chipfilter::ActivateItems(cs);
                         ChipStateInto(&data, cs);
                         data.chipFocusIndex = hitIdx;
+                        // fix thse isseue.md Phase 5 + ADD-ON: an EXTENSION chip is
+                        // ALSO a find-navigator. First click reveals the first
+                        // match; clicking the same ext chip again cycles to the
+                        // next match (wrapping). Items/Folders/No-extension keep
+                        // their existing pure-filter behaviour (no auto-scroll),
+                        // so clear the cursor for them. All via the tested
+                        // chipnav:: model -- never reorders items, moves the real
+                        // Explorer selection or changes the Copy/Move plan.
+                        if (cs.kind == chipfilter::Kind::Ext) {
+                            std::vector<chipnav::Item> navItems;
+                            navItems.reserve(data.items.size());
+                            for (const sel::Item& nit : data.items) {
+                                navItems.push_back(chipnav::Item{
+                                    nit.isFolder
+                                        ? std::wstring()
+                                        : chipmodel::NormExtKey(
+                                              sel::ExtLabel(nit.name, false)),
+                                    nit.isFolder});
+                            }
+                            const std::vector<int> matches =
+                                chipnav::Matches(cs, navItems);
+                            const bool reclick =
+                                (prev.kind == chipfilter::Kind::Ext &&
+                                 prev.activeKey == cs.activeKey);
+                            const int nextItem = chipnav::NextMatch(
+                                matches, data.chipNavItem, reclick);
+                            data.chipNavItem = nextItem;
+                            data.listTopRow = chipnav::RevealTopRow(
+                                data.selViewMode, nextItem, itemCount,
+                                scrollCols, data.listTopRow, visRows);
+                        } else {
+                            data.chipNavItem = -1;
+                        }
                         RefreshGroupPanel(&data);
                     }
                     // A click anywhere on the strip is consumed so it can never
@@ -10586,7 +12149,37 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                     chipfilter::ClickOutside(cs);
                     ChipStateInto(&data, cs);
                     data.chipFocusIndex = -1;
+                    data.chipNavItem = -1;   // Phase 5: no filter -> no current match
                     RefreshGroupPanel(&data);
+                }
+            }
+            // --- "Overflow and Scrollable Help Card" wheel isolation: when
+            // the help card is open and the pointer is over it, the wheel
+            // scrolls the CARD's content and is CONSUMED here, so it never
+            // scrolls the Selected Items list, pans the summary chips, or zooms
+            // the view. The tested helpscroll::WheelTargetsHelpCard predicate
+            // owns the decision; the trailing `continue` guarantees isolation. ---
+            if (msg.message == WM_MOUSEWHEEL && data.helpCard &&
+                IsWindowVisible(data.helpCard)) {
+                POINT hpt = {
+                    static_cast<LONG>(static_cast<short>(LOWORD(msg.lParam))),
+                    static_cast<LONG>(static_cast<short>(HIWORD(msg.lParam)))};
+                RECT hcr = {0};
+                GetWindowRect(data.helpCard, &hcr);   // WM_MOUSEWHEEL pt is screen-space
+                const bool overCard = PtInRect(&hcr, hpt) != FALSE;
+                if (helpscroll::WheelTargetsHelpCard(true, overCard)) {
+                    const int hdelta =
+                        static_cast<int>(static_cast<short>(HIWORD(msg.wParam)));
+                    const int hmax = helpscroll::MaxScroll(
+                        data.helpContentH, data.helpViewportH);
+                    const int hpx = ScaleDpi(40, data.dpi);
+                    const int ny = helpscroll::OnWheel(
+                        data.helpScrollY, hdelta, hpx, hmax);
+                    if (ny != data.helpScrollY) {
+                        data.helpScrollY = ny;
+                        InvalidateRect(data.helpCard, nullptr, FALSE);
+                    }
+                    continue;   // isolated: never reaches the list / chips / zoom
                 }
             }
             // --- fix thse isseue.md Phase A: Ctrl + Mouse Wheel over the
@@ -10612,9 +12205,41 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                     const viewmode::Mode newMode =
                         viewmode::OnCtrlWheel(oldMode, zdelta);
                     if (newMode != oldMode) {
+                        // fix thse isseue.md Phase 4: capture the OLD effective
+                        // layout BEFORE the switch so the repaint SCOPE can be
+                        // decided by comparing it with the NEW one.
+                        const layout::PromptLayout oldL =
+                            ComputeEffectiveLayout(hwnd, &data);
+                        // v0.12.68 #2: capture the first VISIBLE item under the
+                        // OLD mode + columns BEFORE switching, so the view switch
+                        // preserves the user's visible context. The next paint
+                        // converts it to listTopRow for the NEW mode's column
+                        // count (viewmode::TopRowForItem) and clamps it.
+                        data.pendingFirstItem = viewmode::FirstVisibleItem(
+                            oldMode, data.listTopRow, data.selGridCols);
                         data.selViewMode = newMode;
-                        data.selGridCols = 1;   // single-column scaled-row presentation
-                        RefreshGroupPanel(&data);
+                        data.selGridCols = 1;   // the painter recomputes the real grid column count
+                        const layout::PromptLayout newL =
+                            ComputeEffectiveLayout(hwnd, &data);
+                        // fix thse isseue.md Phase 4: eliminate the unnecessary
+                        // full-window repaint. When the surrounding sections do
+                        // NOT move -- a manually sized / maximized popup whose
+                        // card bounds are unchanged -- repaint ONLY the Selected
+                        // Items viewport (no child reposition, no full-window
+                        // RDW_ALLCHILDREN erase) so the title bar, destination
+                        // card, folder-name card and footer never flash. The
+                        // targeted invalidate (erase FALSE) matches the thumbnail
+                        // repaint path. Only a GENUINE section move (e.g. a
+                        // preferred popup must resize for a taller mode) takes the
+                        // single atomic ApplyPromptLayout transaction, which still
+                        // preserves the first-visible item via pendingFirstItem.
+                        if (layout::ViewSwitchRepaintFor(oldL, newL) ==
+                                layout::ViewSwitchRepaint::SelectedOnly) {
+                            if (data.groupInfo)
+                                InvalidateRect(data.groupInfo, nullptr, FALSE);
+                        } else {
+                            ApplyPromptLayout(hwnd, &data);
+                        }
                     }
                     continue;   // Ctrl+wheel is consumed even at the clamp ends
                 }
@@ -10623,11 +12248,18 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
             // vertical list scroll. WM_MOUSEHWHEEL and Shift+WM_MOUSEWHEEL pan
             // horizontally via the tested chipscroll:: model. Ctrl is excluded
             // here (viewmode:: zoom owns Ctrl), matching viewmode::PansChipsOnWheel. ---
-            if ((((msg.message == WM_MOUSEWHEEL && (GetKeyState(VK_SHIFT) & 0x8000)) ||
-                 msg.message == WM_MOUSEHWHEEL)) &&
-                !(GetKeyState(VK_CONTROL) & 0x8000)) {
-                if (overChipStrip &&
-                    chipscroll::NeedsScroll(data.chipContentW, data.chipViewportW)) {
+            const bool wheelCtrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool wheelHoriz = (msg.message == WM_MOUSEHWHEEL);
+            const bool wheelVert  = (msg.message == WM_MOUSEWHEEL);
+            // fix thse isseue.md Issue 5: a wheel OVER THE CHIP STRIP pans the
+            // chips WITHOUT requiring Shift (Shift + wheel and WM_MOUSEHWHEEL stay
+            // supported -- they are also "over the strip"); Ctrl keeps zoom
+            // priority (handled by the Ctrl+wheel block above). The tested
+            // viewmode::WheelPansChips model owns the decision, and the trailing
+            // `continue` guarantees one event is never ALSO a vertical list scroll.
+            if ((wheelVert || wheelHoriz) &&
+                viewmode::WheelPansChips(wheelCtrl, overChipStrip, wheelHoriz)) {
+                if (chipscroll::NeedsScroll(data.chipContentW, data.chipViewportW)) {
                     const int raw =
                         static_cast<int>(static_cast<short>(HIWORD(msg.wParam)));
                     const int delta = (msg.message == WM_MOUSEHWHEEL)
@@ -10811,6 +12443,11 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
             DispatchMessageW(&msg);
         }
     }
+
+    // fix thse isseue.md Issue 2: stop the thumbnail worker + free every cached
+    // bitmap now that the modal loop has ended (BEFORE `data` is destroyed), so
+    // the worker can never post to the closing window or race the teardown.
+    StopThumbThread(&data);
 
     // Snapshot the values we need from `data` before `session` frees it below.
     const bool  accepted  = data.accepted;
@@ -12584,6 +14221,10 @@ static DWORD WINAPI WorkerThread(void* pParameter) {
                                       ? sel[i].display
                                       : GetFileNamePart(sel[i].path);
                         it.isFolder = sel[i].isFolder;
+                        // fix thse isseue.md Issue 2: keep the real path (empty
+                        // for virtual items) so grid views can extract an image
+                        // thumbnail; never used by grouping / file operations.
+                        it.path = sel[i].isVirtual ? std::wstring() : sel[i].path;
                         if (!it.isFolder && !sel[i].isVirtual) {
                             it.sizeBytes = ResolveFileSizeOnDisk(sel[i].path);
                         }
@@ -13144,7 +14785,7 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
 BOOL WhTool_ModInit() {
     // Startup diagnostic. The version here MUST match the @version metadata
     // above.
-    Wh_Log(L"INIT: v0.12.65 ctrlg-group loaded");
+    Wh_Log(L"INIT: v0.12.69 ctrlg-group loaded");
     // Guard g_templates/g_templateCollision. Created BEFORE the first
     // LoadSettings() call (which publishes into them) and before the hook
     // starts, so no thread ever touches the CS uninitialised.
@@ -13177,6 +14818,11 @@ void WhTool_ModUninit() {
     if (g_uiFontSemibold) {
         DeleteObject(g_uiFontSemibold);
         g_uiFontSemibold = nullptr;
+    }
+    // fix thse isseue.md (nav-help typography): release the italic help font.
+    if (g_uiFontItalic) {
+        DeleteObject(g_uiFontItalic);
+        g_uiFontItalic = nullptr;
     }
     // Destroyed AFTER the hook/worker have stopped (KeybdHook_Exit above), so
     // no thread can still be inside the CS when it is deleted.
