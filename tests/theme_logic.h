@@ -1,6 +1,6 @@
 // theme_logic.h
 //
-// PURE mirror of the popup theme palette in explorer-ctrlfn-newfolder.wh.cpp
+// PURE mirror of the popup theme palette in ctrlg-group.wh.cpp
 // (ResolveThemePalette). Colours are packed as 0x00BBGGRR to match the Win32
 // COLORREF layout produced by RGB(r, g, b), so the numeric values here are
 // IDENTICAL to the mod's -- editing a theme colour means editing it in both
@@ -64,16 +64,20 @@ inline constexpr Color kColSurfaceDark      = RGB32(32, 32, 32);
 inline constexpr Color kColTextDark         = RGB32(240, 240, 240);
 inline constexpr Color kColInputDark        = RGB32(84, 84, 84);    // #545454
 inline constexpr Color kColInputTextDark    = RGB32(240, 240, 240);
-// Danger (Cancel) reds -- per theme.
-inline constexpr Color kColDangerLight        = RGB32(196, 43, 28); // #C42B1C
-inline constexpr Color kColDangerLightPressed = RGB32(176, 34, 22);
-inline constexpr Color kColDangerLightBorder  = RGB32(150, 32, 20);
-inline constexpr Color kColDangerDark         = RGB32(160, 42, 34);
-inline constexpr Color kColDangerDarkPressed  = RGB32(130, 34, 28);
-inline constexpr Color kColDangerDarkBorder   = RGB32(110, 28, 22);
+// (fix thse isseue.md section 3) The "danger red" palette mirror was removed in
+// lock-step with the mod: it was reserved for a cancelled/failure STATUS band
+// that no longer exists and was referenced by no test.
+// Neutral secondary button (Cancel + Copy/Move segments) -- a gray surface that
+// sits near the panel, so the primary accent Create is the only strong colour.
+inline constexpr Color kColNeutralLight        = RGB32(251, 251, 251); // #FBFBFB
+inline constexpr Color kColNeutralLightPressed = RGB32(240, 240, 240);
+inline constexpr Color kColNeutralLightBorder  = RGB32(209, 209, 209); // #D1D1D1
+inline constexpr Color kColNeutralDark         = RGB32(45, 45, 45);    // #2D2D2D
+inline constexpr Color kColNeutralDarkPressed  = RGB32(39, 39, 39);
+inline constexpr Color kColNeutralDarkBorder   = RGB32(74, 74, 74);    // #4A4A4A
 
 // Resolve the full palette for the active theme. MUST stay byte-for-byte in
-// sync with ResolveThemePalette() in explorer-ctrlfn-newfolder.wh.cpp.
+// sync with ResolveThemePalette() in ctrlg-group.wh.cpp.
 inline ThemePalette ResolveThemePalette(bool dark) {
     ThemePalette p = {};
     // Create = the muted accent blue in BOTH themes (pressed darker); white
@@ -87,25 +91,25 @@ inline ThemePalette ResolveThemePalette(bool dark) {
         p.panelText = kColTextDark;
         p.editBg = kColInputDark;
         p.editText = kColInputTextDark;
-        p.cancelFill = kColDangerDark;
-        p.cancelFillPressed = kColDangerDarkPressed;
-        p.cancelText = kColWhite;
-        p.cancelBorder = kColDangerDarkBorder;
+        p.cancelFill = kColNeutralDark;
+        p.cancelFillPressed = kColNeutralDarkPressed;
+        p.cancelText = kColTextDark;
+        p.cancelBorder = kColNeutralDarkBorder;
     } else {
         p.panelBg = kColSurfaceLight;
         p.panelText = kColTextLight;
         p.editBg = kColInputLight;
         p.editText = kColInputTextLight;
-        p.cancelFill = kColDangerLight;
-        p.cancelFillPressed = kColDangerLightPressed;
-        p.cancelText = kColWhite;
-        p.cancelBorder = kColDangerLightBorder;
+        p.cancelFill = kColNeutralLight;
+        p.cancelFillPressed = kColNeutralLightPressed;
+        p.cancelText = kColTextLight;
+        p.cancelBorder = kColNeutralLightBorder;
     }
     return p;
 }
 
 // ---- Panel background paint decision (mirror of the WM_ERASEBKGND / glass
-// logic in explorer-ctrlfn-newfolder.wh.cpp) ----
+// logic in ctrlg-group.wh.cpp) ----
 //
 // Bug: when the popup requested the acrylic backdrop (glass) the mod skipped
 // filling the panel entirely and returned 1, trusting DWM to composite the

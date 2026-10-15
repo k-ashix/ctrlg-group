@@ -1,6 +1,6 @@
 // newfolder_logic.h
 //
-// PURE logic mirrored from explorer-ctrlfn-newfolder.wh.cpp so it can be unit
+// PURE logic mirrored from ctrlg-group.wh.cpp so it can be unit
 // tested with a plain g++ build (no Win32 runtime required). The mod is a
 // Windhawk translation unit with no standalone main() and Windhawk/Win32
 // headers, so it cannot be compiled here directly -- each pure decision is
@@ -170,6 +170,141 @@ inline bool IsGestureModifierHeld(const int* heldVks, int heldCount,
         }
     }
     return true;   // all configured hold-modifiers still down
+}
+
+// ---------------------------------------------------------------------------
+// #B  Capture-window key routing: template letter vs count-commit vs cancel.
+//
+// BUG (Ctrl+Shift+N + template letter): after the trigger fires, the capture
+// window is open. To type a lowercase template letter (e.g. 'i') the user must
+// RELEASE Shift -- letters are lowercase. But the window was gated on EVERY
+// configured hold-modifier staying down (IsGestureModifierHeld: Ctrl AND Shift
+// for Ctrl+Shift+N). So releasing Shift closed the window and committed a
+// single default folder BEFORE the template letter arrived: first attempt made
+// nothing/one folder, a second attempt (keys held differently) fired the
+// template and created all its folders. The template letter must NOT be held
+// hostage to a still-pressed modifier.
+//
+// The correct rule: once the capture window is open, a letter BOUND to a
+// template routes to that template REGARDLESS of which hold-modifiers are still
+// physically down. Modifier release only ever commits an accumulated COUNT --
+// it must never swallow a pending, bound template letter. Digits still commit
+// the count; a bound letter fires its template; an unbound letter commits the
+// (default single) folder as before.
+enum class CaptureKey {
+    Digit,           // 0-9
+    BoundLetter,     // a-z that IS bound to a template
+    UnboundLetter,   // a-z that is NOT bound to a template
+    Enter,           // commit count
+    Escape,          // cancel: create nothing
+    ModifierRelease, // a configured hold-modifier went up (no other key)
+    Other,           // any other key
+};
+
+enum class CaptureRoute {
+    Continue,       // still capturing (keep the window open)
+    FireTemplate,   // route to the template action; create NO count folders
+    CommitCount,    // commit the accumulated count (>=1) as folders
+    Cancel,         // create nothing
+};
+
+// Decide what a key does inside the count/template capture window.
+//
+// `sawDigit`      : has at least one count digit been typed already?
+// `modifierHeld`  : are ALL configured hold-modifiers still physically down?
+//                   (false once the user releases e.g. Shift to type a letter.)
+//
+// Template letters are the crux of the bug: a BoundLetter fires its template
+// whether or not `modifierHeld` is still true -- the release of a modifier can
+// NEVER pre-empt a bound template letter. Only a Digit-then-release or a plain
+// ModifierRelease commits the count.
+inline CaptureRoute CaptureLetterDecide(CaptureKey key, bool sawDigit,
+                                        bool modifierHeld) {
+    switch (key) {
+        case CaptureKey::BoundLetter:
+            // Fires the template no matter the modifier state. THIS is the fix:
+            // releasing Shift to type the lowercase letter must not have already
+            // committed a folder and closed the window.
+            return CaptureRoute::FireTemplate;
+
+        case CaptureKey::Escape:
+            return CaptureRoute::Cancel;
+
+        case CaptureKey::Digit:
+            // A digit keeps (or starts) count entry. If a modifier was released
+            // on this very event, the count commits; otherwise keep capturing.
+            return modifierHeld ? CaptureRoute::Continue
+                                : CaptureRoute::CommitCount;
+
+        case CaptureKey::Enter:
+            return CaptureRoute::CommitCount;
+
+        case CaptureKey::ModifierRelease:
+            // Releasing a hold-modifier finishes count entry: commit typed
+            // digits, or the default single folder when none were typed.
+            return CaptureRoute::CommitCount;
+
+        case CaptureKey::UnboundLetter:
+        case CaptureKey::Other:
+        default:
+            // Not a template, not a count key: commit what we have (default
+            // single folder). Same behaviour whether or not a modifier is held.
+            (void)sawDigit;
+            return CaptureRoute::CommitCount;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// #B2  Lowercase normalization + capture-window gating for template letters.
+//
+// Requirement: a template key must
+//   (a) normalize to its LOWERCASE letter even when Shift is held (typing an
+//       uppercase 'I' still resolves the template bound to 'i'), and
+//   (b) fire ONLY while the capture window is open (right after Ctrl+Shift+N).
+//       During normal typing anywhere else the SAME letters must NEVER fire a
+//       template -- no accidental folder creation while editing code.
+//
+// A keyboard VK code for a letter is Shift-INDEPENDENT (both 'i' and Shift+'i'
+// arrive as VK 'I' == 0x49). Folding VK->lowercase is therefore inherently
+// case-normalizing; this helper makes that explicit and returns 0 for anything
+// that is not an A-Z letter.
+inline wchar_t NormalizeTemplateLetter(int vk) {
+    if (vk >= 'A' && vk <= 'Z') {
+        return static_cast<wchar_t>(vk - 'A' + L'a');
+    }
+    return 0;  // not a letter -> never a template key
+}
+
+// Bit-mask membership test mirrored from the mod's IsTemplateKeyBound: bit
+// (c-'a') of `mask` is set iff lowercase letter `c` is bound to a template.
+// Case-folds first, so 'I' and 'i' test the same bit.
+inline bool TemplateKeyBoundInMask(unsigned long mask, wchar_t typed) {
+    wchar_t c = typed;
+    if (c >= L'A' && c <= L'Z') c = static_cast<wchar_t>(c - L'A' + L'a');
+    if (c < L'a' || c > L'z') return false;
+    return (mask & (1UL << (c - L'a'))) != 0;
+}
+
+// The single decision the hook must make for a letter keydown: does it fire a
+// template?  It fires ONLY when ALL of these hold:
+//   - the capture window is open (captureActive) -- so nothing fires during
+//     normal typing, and
+//   - the VK normalizes to an A-Z letter (Shift state irrelevant), and
+//   - that lowercase letter is bound to a template in the mask.
+// Returns the lowercase template key to fire, or 0 for "not a template action".
+inline wchar_t ResolveTemplateLetterKey(bool captureActive, int vk,
+                                        unsigned long templateKeyMask) {
+    if (!captureActive) {
+        return 0;   // (b) never fire outside the capture window
+    }
+    wchar_t c = NormalizeTemplateLetter(vk);   // (a) lowercase, Shift-independent
+    if (c == 0) {
+        return 0;
+    }
+    if (!TemplateKeyBoundInMask(templateKeyMask, c)) {
+        return 0;   // unbound letter -> not a template
+    }
+    return c;
 }
 
 // Chord window: max gap between the two chord keys (and the replay timeout).
@@ -396,6 +531,143 @@ inline TriggerResult TriggerDecide(TriggerMode mode,
 }
 
 // ===========================================================================
+// #C  Config-driven trigger state machine (mirror of LowLevelKeybdProc).
+//
+// The MOD is config-driven: a shortcut is a ShortcutSnapshot {triggerVk,
+// heldVks[], heldCount}, NOT the fixed TriggerMode enum above. Every supported
+// gesture flows through ONE path:
+//
+//   Single-press (Ctrl+N, Ctrl+Q, Ctrl+G, Ctrl+Shift+N)
+//     hold every heldVk, tap triggerVk -> FIRE immediately (open capture
+//     window for batch/template; leaving it makes one folder).
+//
+//   Two-key chord (Ctrl+F+N: hold Ctrl, tap F, tap N; Ctrl+N+F: tap N, tap F)
+//     the ONE non-modifier held key is the "middle" key. It is SWALLOWED on its
+//     keydown (so Ctrl+N never opens a new window, Ctrl+F never opens search),
+//     the gesture goes pending, and completes only when triggerVk follows while
+//     the modifiers stay held. A broken/expired chord replays Ctrl+F only for
+//     the Ctrl+F+N case (that is the search key it owed back).
+//
+// After a fire, the capture window (CountDecide / CaptureLetterDecide, above)
+// takes over so the user can freely type a batch count OR a template letter, or
+// leave it to create a single folder -- identical for ALL shortcut modes.
+
+// The single non-modifier held key of a chord (F for Ctrl+F+N, N for Ctrl+N+F).
+// 0 when the shortcut is single-press (Ctrl+N/Q/G) or a pure modifier+trigger
+// combo (Ctrl+Shift+N) -- only a non-zero value uses the pending-chord path.
+inline int ChordIntermediateVkFromSnapshot(const ShortcutSnapshot& s) {
+    int heldCount = s.heldCount;
+    if (heldCount > 4) heldCount = 4;
+    int found = 0;
+    for (int i = 0; i < heldCount; ++i) {
+        if (!IsHoldModifierVk(s.heldVks[i])) {
+            if (found != 0) return 0;  // >1 non-modifier: not a simple chord
+            found = s.heldVks[i];
+        }
+    }
+    return found;
+}
+
+// Are ALL configured hold-modifiers of the shortcut currently down?
+// `keyDown(vk)` wraps GetAsyncKeyState. Mirrors IsGestureModifierHeldNow: for a
+// multi-modifier shortcut (Ctrl+Shift+N) EVERY modifier must be held.
+inline bool SnapshotModifiersHeld(const ShortcutSnapshot& s,
+                                  const std::function<bool(int)>& keyDown) {
+    int heldCount = s.heldCount;
+    if (heldCount > 4) heldCount = 4;
+    for (int i = 0; i < heldCount; ++i) {
+        int vk = s.heldVks[i];
+        if (!IsHoldModifierVk(vk)) continue;
+        if (!keyDown || !keyDown(vk)) return false;
+    }
+    return true;
+}
+
+// The config-driven decision the hook makes for one key event. Mirrors the
+// LowLevelKeybdProc trigger path (NOT the count/capture window, which is
+// CountDecide / CaptureLetterDecide). `keyDown` reports whether a vk is
+// physically down now (for the "all held keys still down" check).
+inline TriggerResult SnapshotTriggerDecide(const ShortcutSnapshot& sc,
+                                           const TriggerState& st,
+                                           const KeyEvent& ev,
+                                           const std::function<bool(int)>& keyDown) {
+    TriggerResult r;
+    r.next = st;
+
+    const int chordVk = ChordIntermediateVkFromSnapshot(sc);
+
+    // Timeout tick: expire a pending chord; replay Ctrl+F only if that was the
+    // swallowed middle key (Ctrl+F+N owes search back).
+    if (ev.isTimeout) {
+        if (st.pending && (ev.nowMs - st.pendingSinceMs) > kChordTimeoutMs) {
+            r.next.pending = false;
+            r.next.pendingVk = 0;
+            if (st.pendingVk == kVkF) r.action = TriggerAction::ReplayCtrlF;
+        }
+        return r;
+    }
+
+    if (ev.injected) return r;   // never react to our own injected input
+
+    // Swallow the key-up of a key whose key-down we swallowed.
+    if (!ev.isDown) {
+        if (st.swallowUpVk != 0 && ev.vk == st.swallowUpVk) {
+            r.swallow = true;
+            r.next.swallowUpVk = 0;
+        }
+        return r;
+    }
+
+    // --- key DOWN ---
+    // Resolve a pending chord.
+    if (st.pending) {
+        const bool expired = (ev.nowMs - st.pendingSinceMs) > kChordTimeoutMs;
+        if (!expired && ev.vk == sc.triggerVk && SnapshotModifiersHeld(sc, keyDown)) {
+            r.swallow = true;
+            r.action = TriggerAction::CreateFolder;
+            r.next.pending = false;
+            r.next.pendingVk = 0;
+            r.next.swallowUpVk = ev.vk;
+            return r;
+        }
+        // Auto-repeat of the held middle key while modifiers stay down.
+        if (!expired && ev.vk == st.pendingVk && SnapshotModifiersHeld(sc, keyDown)) {
+            r.swallow = true;
+            return r;
+        }
+        // Chord broken/expired: abandon, replaying Ctrl+F only for the F case.
+        r.next.pending = false;
+        r.next.pendingVk = 0;
+        if (st.pendingVk == kVkF) r.action = TriggerAction::ReplayCtrlF;
+        // fall through: let this key be evaluated as a possible fresh start
+    }
+
+    // Start a pending chord: the middle key pressed with modifiers held and
+    // Explorer in front. Swallow it now (no new window / no search leak).
+    if (chordVk != 0 && ev.explorerForeground && ev.vk == chordVk &&
+        SnapshotModifiersHeld(sc, keyDown)) {
+        r.swallow = true;
+        r.next.pending = true;
+        r.next.pendingVk = chordVk;
+        r.next.pendingSinceMs = ev.nowMs;
+        r.next.swallowUpVk = chordVk;
+        return r;
+    }
+
+    // Single-press fire: trigger key with EVERY held key still down, Explorer
+    // in front. Covers Ctrl+N, Ctrl+Q, Ctrl+G, Ctrl+Shift+N.
+    if (ev.explorerForeground && ev.vk == sc.triggerVk &&
+        SnapshotModifiersHeld(sc, keyDown)) {
+        r.swallow = true;
+        r.action = TriggerAction::CreateFolder;
+        r.next.swallowUpVk = ev.vk;
+        return r;
+    }
+
+    return r;  // passthrough
+}
+
+// ===========================================================================
 // Multi-folder creation (v0.2.0) -- pure logic, mirrored into the mod.
 // ===========================================================================
 #include <vector>
@@ -409,6 +681,14 @@ static const int kFolderHardCap    = 100;
 // batch counts and folder templates work out of the box (a template key is only
 // captured while the count window is open, which the toggle controls).
 static const bool kMultiFolderDefaultOn = true;
+
+// Default state of the "Name folders with a popup box" toggle (useDialog) on
+// the Ctrl+F+N New-Folder path. It ships OFF -> the native inline rename box is
+// used by default; the user can turn the themed popup ON. BOTH modes stay
+// available. (Ctrl+G Group Selection has its own always-on popup, unrelated to
+// this toggle.) Mirrors g_useDialog's shipped default; pinned by
+// tests/popup_default_test.cpp.
+static const bool kUsePopupDefaultOn = false;
 
 // Clamp the user's maxFolders setting into the allowed [1, kFolderHardCap] range.
 inline int ClampFolderMax(int maxSetting) {
