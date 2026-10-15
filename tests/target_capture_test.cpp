@@ -1,6 +1,6 @@
 // target_capture_test.cpp
 // Pins the origin-target decision for #1 (ShouldActOnTarget, mirrored from the
-// worker's guard in explorer-ctrlfn-newfolder.wh.cpp).
+// worker's guard in ctrlg-group.wh.cpp).
 //
 // Bug (#1): the Explorer target HWND was resolved LATE on the worker thread
 // (inside PerformNewFolderAction), long after the shortcut fired -- the

@@ -75,18 +75,32 @@ int main() {
     check(light.cancelFill != dark.cancelFill, "cancelFill differs light vs dark");
     check(light.cancelBorder != dark.cancelBorder, "cancelBorder differs light vs dark");
 
-    // ---- Dark input field is the requested #545454; captions are white ----
+    // ---- Dark input field is the requested #545454 ----
     check(dark.editBg == RGB32(84, 84, 84), "dark input field is #545454");
-    check(light.cancelText == RGB32(255, 255, 255) &&
-          dark.cancelText == RGB32(255, 255, 255), "Cancel caption is white");
 
-    // ---- Cancel is unmistakably RED in both themes; Create stays BLUE ----
-    check(ColR(light.cancelFill) > ColG(light.cancelFill) &&
-          ColR(light.cancelFill) > ColB(light.cancelFill),
-          "light Cancel fill is red-dominant");
-    check(ColR(dark.cancelFill) > ColG(dark.cancelFill) &&
-          ColR(dark.cancelFill) > ColB(dark.cancelFill),
-          "dark Cancel fill is red-dominant");
+    // ---- Cancel is a NEUTRAL secondary button (waht to create.md #8): NOT
+    //      red, caption is the normal theme text (not white), and its surface
+    //      sits near the panel surface rather than a danger colour. Red is
+    //      reserved for the cancelled/failure STATUS band, not the button. ----
+    check(light.cancelText == light.panelText && dark.cancelText == dark.panelText,
+          "Cancel caption uses neutral theme text");
+    check(!(ColR(light.cancelFill) > ColG(light.cancelFill) &&
+            ColR(light.cancelFill) > ColB(light.cancelFill)),
+          "light Cancel fill is NOT red-dominant");
+    check(!(ColR(dark.cancelFill) > ColG(dark.cancelFill) &&
+            ColR(dark.cancelFill) > ColB(dark.cancelFill)),
+          "dark Cancel fill is NOT red-dominant");
+    // Neutral fill: the three channels are close together (a gray), unlike the
+    // old red where R was far above G/B.
+    auto spread = [](Color c) {
+        int r = ColR(c), g = ColG(c), b = ColB(c);
+        int mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        int mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        return mx - mn;
+    };
+    check(spread(light.cancelFill) <= 24, "light Cancel fill is a neutral gray");
+    check(spread(dark.cancelFill) <= 24, "dark Cancel fill is a neutral gray");
+    // Create stays the blue accent so the primary action is unmistakable.
     check(ColB(light.createFill) > ColR(light.createFill) &&
           ColB(light.createFill) > ColG(light.createFill),
           "Create fill stays blue-dominant");

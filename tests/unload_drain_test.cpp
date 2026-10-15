@@ -1,6 +1,6 @@
 // unload_drain_test.cpp
 // Pins the shutdown-race decision for the queued action (ShouldRunQueuedAction,
-// mirrored from the worker's guard in explorer-ctrlfn-newfolder.wh.cpp).
+// mirrored from the worker's guard in ctrlg-group.wh.cpp).
 //
 // The bug: Worker_Exit() sets g_unloading, but the worker loop did not check
 // g_unloading before executing a dequeued WM_APP+1. An action queued just

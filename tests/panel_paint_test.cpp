@@ -1,7 +1,7 @@
 // panel_paint_test.cpp
 // Pins the popup panel-background paint decision (ShouldPaintPanelBackground,
 // mirrored from the WM_ERASEBKGND / glass logic in
-// explorer-ctrlfn-newfolder.wh.cpp).
+// ctrlg-group.wh.cpp).
 //
 // Bug reproduced here (RED before the fix): with the acrylic backdrop REQUESTED
 // but NOT actually compositing, the old mod skipped the solid fill and left the

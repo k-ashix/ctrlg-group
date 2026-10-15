@@ -1,6 +1,6 @@
 // queue_drain_test.cpp
 // Pins the queue-drain decision for #2 (ShouldRunQueuedAction, mirrored from
-// the worker's guard in explorer-ctrlfn-newfolder.wh.cpp).
+// the worker's guard in ctrlg-group.wh.cpp).
 //
 // Bug (#2): the name popup (PromptForFolderName) runs a NESTED GetMessageW loop
 // on the worker thread while PerformNewFolderAction is still in flight. The

@@ -7,7 +7,7 @@
 // is pure and lives here so it can be unit-tested with a plain g++ build.
 //
 // This header is fork-only: it is NOT mirrored into the main mod
-// (explorer-ctrlfn-newfolder.wh.cpp), which is intentionally left untouched.
+// (ctrlg-group.wh.cpp), which is intentionally left untouched.
 // It builds on the existing mirrored core in newfolder_logic.h.
 //
 #pragma once
@@ -192,6 +192,37 @@ inline bool ShouldRunQueuedAction(const QueuedAction& q) {
         return false;   // stale/legacy post with no captured target -> drain
     }
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// #2 (worker-busy false-cancel): inputs the worker has when deciding whether a
+// queued folder action is safe to run. snapshotPosted = the WM_APP+2 snapshot
+// POST succeeded; snapshotDirResolved = the snapshot actually resolved a dir;
+// currentDirResolved = the active view resolved a dir now; dirsMatch = the
+// snapshot dir equals the current dir (no same-tab drift); tabStillValid = the
+// captured tab HWND is still the active tab (no tab switch). workerWasBusy is
+// informational only: a busy worker (late snapshot) must NOT by itself cancel.
+struct SnapshotTrust {
+    bool snapshotPosted;
+    bool snapshotDirResolved;
+    bool currentDirResolved;
+    bool dirsMatch;
+    bool tabStillValid;
+    bool workerWasBusy;   // late snapshot due to a prior in-flight action
+};
+
+// True => RUN the action. The drift protection is the DIRECTORY COMPARE plus the
+// TAB-HWND guard, both authoritative. A late snapshot (workerWasBusy) is NOT a
+// reason to cancel on its own -- that was the false-cancel bug. Cancel only when
+// there is no drift protection at all (no post / unresolved dirs) or when a real
+// drift is detected (dirs differ or the tab switched).
+inline bool ShouldRunAfterSnapshot(const SnapshotTrust& s) {
+    if (!s.snapshotPosted)       return false; // no drift protection -> cancel
+    if (!s.snapshotDirResolved)  return false; // snapshot empty -> cancel
+    if (!s.currentDirResolved)   return false; // can't verify -> cancel
+    if (!s.tabStillValid)        return false; // tab switched -> cancel
+    if (!s.dirsMatch)            return false; // real same-tab drift -> cancel
+    return true;                                // safe: busy-but-no-drift -> RUN
 }
 
 // ---------------------------------------------------------------------------

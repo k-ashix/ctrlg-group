@@ -1,6 +1,6 @@
 // rename_outcome_test.cpp
 // Pins the inline-rename cancellation contract (ShouldUseCapturedName, mirrored
-// from the inline flow in explorer-ctrlfn-newfolder.wh.cpp).
+// from the inline flow in ctrlg-group.wh.cpp).
 //
 // Regression: WaitForInlineRenameResult() returned only the last EDIT text plus
 // a "did an EDIT appear" bool, inferring commit from "the EDIT disappeared".

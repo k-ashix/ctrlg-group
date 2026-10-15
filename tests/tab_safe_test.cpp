@@ -1,6 +1,6 @@
 // tab_safe_test.cpp
 // Pins the tab/path-safety decision for #3 (ShouldActOnTab, mirrored from the
-// worker's guard in explorer-ctrlfn-newfolder.wh.cpp).
+// worker's guard in ctrlg-group.wh.cpp).
 //
 // #3: capturing only the Explorer WINDOW HWND is not enough -- one window hosts
 // many tabs. Triggering in tab A then switching to tab B while the action is
