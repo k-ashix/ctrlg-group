@@ -2,7 +2,7 @@
 // @id              ctrlg-group
 // @name            Ctrl+G to Group Folder/Files
 // @description     Ctrl+G makes Folder/Files
-// @version         0.12.69
+// @version         0.12.70
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -4598,38 +4598,57 @@ namespace infohelp {
 
 inline const wchar_t* AccessibleName() { return L"Navigation help"; }
 
-inline const wchar_t* Heading() { return L"Navigation help"; }
+inline const wchar_t* Heading() { return L"Help"; }  // spec section 2: visible card title is "Help" (button accessible name stays AccessibleName()=="Navigation help")
 
 // "Overflow and Scrollable Help Card": the card now renders the FULL navigation
 // help (NAVIGATE ITEMS + New Folder + Group Creation + Auto Grouping) as single
 // short lines; each line's Kind drives section/divider/body typography while the
 // "Navigation help" heading stays fixed and the body scrolls on overflow. Keep
 // in lockstep with tests/info_help_logic.h.
-enum class Kind { Section, Body, Divider };
+// Spec sections 3/5/6: FOUR sections whose headings are exactly the chip labels
+// (Navigation / New Folder / Group Creation / Auto Group). Each line carries a
+// Kind so the renderer applies the size hierarchy -- Section (13 px bold), Body
+// (12 px), Bullet (indented 12 px), Note (11 px italic secondary) and Divider.
+// Keyboard combinations are **`bold mono`** key tokens; action names are
+// **bold**; inline examples are `mono`. Markers are NEVER drawn literally.
+enum class Kind { Section, Body, Bullet, Note, Divider, Footer };
 struct HelpLine { const wchar_t* text; Kind kind; };
 inline const HelpLine* Lines(int* count) {
     static const HelpLine kLines[] = {
-        { L"NAVIGATE ITEMS",                                              Kind::Section },
-        { L"**Mouse wheel**: scroll the selected items",                  Kind::Body },
-        { L"**Shift + Wheel**: scroll the summary chips",                 Kind::Body },
-        { L"**Ctrl + Wheel**: List / Large / Extra large icons",          Kind::Body },
-        { L"Copy / Move: click, or **Left** / **Right** when focused",    Kind::Body },
-        { L"**Tab**: move focus   **Enter**: activate   **Esc**: cancel", Kind::Body },
-        { L"",                                                            Kind::Divider },
-        { L"NEW FOLDER - Ctrl + F + N",                                   Kind::Section },
-        { L"**Single folder**: type a name, then confirm",                Kind::Body },
-        { L"**Batch**: type a count after the shortcut (e.g. `9`)",       Kind::Body },
-        { L"**Templates**: press an assigned template key",               Kind::Body },
-        { L"",                                                            Kind::Divider },
-        { L"GROUP CREATION - Ctrl + G",                                   Kind::Section },
-        { L"**Group**: name the destination, pick Copy or Move",          Kind::Body },
-        { L"**Copy** keeps the originals; **Move** relocates them",       Kind::Body },
-        { L"**Ctrl + G then C / M**: direct to the last destination",     Kind::Body },
-        { L"",                                                            Kind::Divider },
-        { L"AUTO GROUPING",                                               Kind::Section },
-        { L"**Auto Group**: fold files into folders by extension",        Kind::Body },
-        { L"_Wait for the 8-second countdown, then confirm_",             Kind::Body },
-        { L"Layout: **Flat** or **Images parent**, plus custom rules",    Kind::Body },
+        { L"Navigation", Kind::Section },
+        { L"**`Mouse wheel`** - Scroll the selected items", Kind::Body },
+        { L"**`Shift + Wheel`** - Scroll the summary chips horizontally", Kind::Body },
+        { L"**`Ctrl + Wheel`** - Switch between List, Large and Extra large icon views", Kind::Body },
+        { L"**Copy / Move** - Click a segment, or use **Left** / **Right** when focused", Kind::Body },
+        { L"**`Tab`** / **`Shift + Tab`** - Move between controls", Kind::Body },
+        { L"**`Enter`** - Activate the focused action", Kind::Body },
+        { L"**`Esc`** - Cancel the Group popup", Kind::Body },
+        { L"Image previews appear only in Large and Extra large views, once the thumbnail path is verified", Kind::Note },
+        { L"", Kind::Divider },
+        { L"New Folder", Kind::Section },
+        { L"**Shortcut**: **`Ctrl + F + N`**", Kind::Body },
+        { L"**Single folder**: enter a name and confirm", Kind::Bullet },
+        { L"**Batch creation**: when enabled, type a count after the shortcut (e.g. `9` for nine), up to the limit", Kind::Bullet },
+        { L"**Naming**: inline naming is the default; popup naming is available in settings", Kind::Bullet },
+        { L"**Templates**: press an assigned template key to create its folder set", Kind::Bullet },
+        { L"", Kind::Divider },
+        { L"Group Creation", Kind::Section },
+        { L"**Shortcut**: **`Ctrl + G`**", Kind::Body },
+        { L"**Group**: enter a destination name, choose Copy or Move, confirm", Kind::Bullet },
+        { L"**Copy**: keep the originals", Kind::Bullet },
+        { L"**Move**: relocate the selected items", Kind::Bullet },
+        { L"**Blank name**: reuse the last used target name when that applies", Kind::Bullet },
+        { L"**Optional quick actions**: if enabled, **`Ctrl + G then C`** copies or **`Ctrl + G then M`** moves to the last destination", Kind::Body },
+        { L"Quick Copy/Move is setting-dependent and never active by default", Kind::Note },
+        { L"", Kind::Divider },
+        { L"Auto Group", Kind::Section },
+        { L"**Auto Group**: organize selected files into folders by extension, with no folder name", Kind::Body },
+        { L"**Safety delay**: wait for the configured eight-second countdown before clicking Auto Group", Kind::Bullet },
+        { L"**Flat layout**: create extension folders directly in the destination", Kind::Bullet },
+        { L"**Images parent**: group image-extension folders beneath the configured Images parent", Kind::Bullet },
+        { L"**Custom rules**: let configured rules place matching extensions into named buckets", Kind::Bullet },
+        { L"The countdown never runs the operation on its own; some features may be disabled", Kind::Note },
+        { L"Visit `Ashix` _Ctrl + Left-click to open_", Kind::Footer },
     };
     if (count) *count = static_cast<int>(sizeof(kLines) / sizeof(kLines[0]));
     return kLines;
@@ -4644,6 +4663,18 @@ inline Kind LineKind(int i) {
     int n = 0; const HelpLine* ls = Lines(&n);
     if (i < 0 || i >= n) return Kind::Body;
     return ls[i].kind;
+}
+
+// fix thse isseue.md add-on section 4: the single Kind::Footer line's raw text
+// (markers intact). The footer is painted in a FIXED band OUTSIDE the scrollable
+// body; the renderer runs this through ParseRuns so "Visit" stays regular, the
+// `Ashix` backtick span becomes the rounded key token and the _Ctrl + ..._
+// underscore span is the smaller italic hint. No literal "GitHub" label.
+inline const wchar_t* FooterText() {
+    int n = 0; const HelpLine* ls = Lines(&n);
+    for (int i = 0; i < n; ++i)
+        if (ls[i].kind == Kind::Footer) return ls[i].text;
+    return L"";
 }
 
 // fix thse isseue.md (nav-help typography): a run can be bold (**key**),
@@ -4805,6 +4836,170 @@ inline bool WheelTargetsHelpCard(bool cardShown, bool pointerOverCard) {
 }
 
 }  // namespace helpscroll
+
+// ---- Navigation Help card section-navigation chips (fix thse isseue.md
+// section 3 + add-on section 3) ------------------------------------------------
+// Byte-for-byte mirror of tests/help_chips_logic.h. Pure. Four chips labelled
+// exactly like the four section headings; a chip maps 1:1 to its infohelp
+// Section line. Owns the strip layout math, hit-testing, horizontal strip
+// scroll (clip + clamp + ensure-visible so the row never wraps or grows the
+// card), active-section tracking from the body scroll, and the body scroll
+// target when a chip is clicked. The chip strip is painted FIXED under the
+// header while the body scrolls. Keep in lockstep with the test header.
+namespace helpchips {
+
+inline int Count() { return 4; }
+inline const wchar_t* Label(int i) {
+    switch (i) {
+        case 0: return L"Navigation";
+        case 1: return L"New Folder";
+        case 2: return L"Group Creation";
+        case 3: return L"Auto Group";
+    }
+    return L"";
+}
+
+struct Rect { int left; int right; };
+
+inline std::vector<Rect> Layout(const std::vector<int>& widths, int gap,
+                                int startX) {
+    std::vector<Rect> out;
+    int x = startX;
+    for (size_t i = 0; i < widths.size(); ++i) {
+        out.push_back(Rect{x, x + widths[i]});
+        x += widths[i] + gap;
+    }
+    return out;
+}
+
+inline int TotalWidth(const std::vector<int>& widths, int gap) {
+    int w = 0;
+    for (size_t i = 0; i < widths.size(); ++i) {
+        w += widths[i];
+        if (i + 1 < widths.size()) w += gap;
+    }
+    return w;
+}
+
+inline int HitTest(const std::vector<Rect>& rects, int x) {
+    for (size_t i = 0; i < rects.size(); ++i)
+        if (x >= rects[i].left && x < rects[i].right) return static_cast<int>(i);
+    return -1;
+}
+
+inline int MaxScrollX(int stripW, int visibleW) {
+    const int m = stripW - visibleW;
+    return m > 0 ? m : 0;
+}
+
+inline int ClampScrollX(int offset, int stripW, int visibleW) {
+    const int m = MaxScrollX(stripW, visibleW);
+    if (offset < 0) return 0;
+    if (offset > m) return m;
+    return offset;
+}
+
+inline int EnsureVisible(const std::vector<Rect>& rects, int i, int offset,
+                         int visibleW, int stripW) {
+    if (i < 0 || i >= static_cast<int>(rects.size()))
+        return ClampScrollX(offset, stripW, visibleW);
+    const int left  = rects[i].left;
+    const int right = rects[i].right;
+    if (left < offset)                  offset = left;
+    else if (right > offset + visibleW) offset = right - visibleW;
+    return ClampScrollX(offset, stripW, visibleW);
+}
+
+inline int ActiveSection(const std::vector<int>& anchors, int scrollY,
+                         int viewportH) {
+    if (anchors.empty()) return 0;
+    const int line = scrollY + viewportH / 3;
+    int active = 0;
+    for (size_t i = 0; i < anchors.size(); ++i)
+        if (anchors[i] <= line) active = static_cast<int>(i);
+    return active;
+}
+
+inline int ScrollTargetFor(const std::vector<int>& anchors, int i,
+                           int maxScrollY) {
+    if (i < 0 || i >= static_cast<int>(anchors.size())) return 0;
+    int t = anchors[i];
+    if (t < 0) t = 0;
+    if (t > maxScrollY) t = maxScrollY;
+    return t;
+}
+
+inline int NextChip(int cur, int n) { return (n <= 0) ? 0 : (cur + 1) % n; }
+inline int PrevChip(int cur, int n) { return (n <= 0) ? 0 : (cur - 1 + n) % n; }
+
+}  // namespace helpchips
+
+// ---- Navigation Help inline keyboard-token colours (fix thse isseue.md add-on
+// section 6) ------------------------------------------------------------------
+// Byte-for-byte mirror of tests/help_token_logic.h. Pure. The theme-aware token
+// surface so a `mono` key token NEVER switches to a bright/white background in
+// dark mode. Rgb() packs COLORREF (0x00BBGGRR), equal to RGB(r,g,b) on device.
+namespace helptoken {
+
+struct Colors {
+    unsigned long bg;
+    unsigned long text;
+    unsigned long border;
+    unsigned long hover;   // add-on section 2: restrained hover variant of the fill
+};
+
+inline unsigned long Rgb(int r, int g, int b) {
+    return (unsigned long)(r & 0xFF)
+         | ((unsigned long)(g & 0xFF) << 8)
+         | ((unsigned long)(b & 0xFF) << 16);
+}
+
+// add-on section 2 FLIP: the key token is a HIGH-CONTRAST INVERSE chip. DARK
+// theme -> MUTED MID-GREY (#D1CFC0, easy on the eyes) surface, DARK-GREY
+// (#1F1F1F) text; LIGHT theme -> DEEP CHARCOAL (#171717) surface, WHITE
+// (#FFFFFF) text. The border is a near-identical neutral (a hair off the fill)
+// so the 0.5 px edge stays integrated and never reads as a doubled outline;
+// `hover` is a restrained few-step variant of the fill used by the footer token.
+inline Colors ForTheme(bool dark) {
+    if (dark) {
+        return Colors{ Rgb(209, 207, 192), Rgb(31, 31, 31),
+                       Rgb(188, 186, 172), Rgb(196, 194, 180) };
+    }
+    return Colors{ Rgb(23, 23, 23), Rgb(255, 255, 255),
+                   Rgb(44, 44, 44), Rgb(48, 48, 48) };
+}
+
+inline int R(unsigned long c)    { return (int)(c & 0xFF); }
+inline int G(unsigned long c)    { return (int)((c >> 8) & 0xFF); }
+inline int B(unsigned long c)    { return (int)((c >> 16) & 0xFF); }
+inline int Luma(unsigned long c) { return (R(c) + G(c) + B(c)) / 3; }
+
+}  // namespace helptoken
+
+// ---- Navigation Help GitHub author footer (fix thse isseue.md section 6) -----
+// Byte-for-byte mirror of tests/help_footer_logic.h. Pure. The author URL and
+// the exact open gesture: the link opens ONLY on a Ctrl + left-click INSIDE the
+// footer rect -- a plain click never navigates.
+namespace helpfooter {
+
+inline const wchar_t* Url() { return L"https://github.com/k-ashix"; }
+
+inline bool InsideFooter(int px, int py, int left, int right, int top,
+                         int bottom) {
+    return px >= left && px < right && py >= top && py < bottom;
+}
+
+inline bool ShouldOpen(bool ctrlDown, bool leftClick, bool insideFooter) {
+    return ctrlDown && leftClick && insideFooter;
+}
+
+// fix thse isseue.md add-on section 4: a plain DOUBLE left-click inside the
+// footer ALSO opens the author link (no Ctrl needed on the double-click path).
+inline bool ShouldOpenDouble(bool leftDoubleClick, bool insideFooter) {
+    return leftDoubleClick && insideFooter;
+}
+
+}  // namespace helpfooter
 
 // ---- Destination-section display model ----
 // Byte-for-byte mirror of tests/destination_logic.h (UI spec item 5).
@@ -5592,6 +5787,8 @@ static HFONT UiFontSemibold(UINT dpi) {
 // per-DPI and freed on unload.
 static HFONT g_uiFontMono = nullptr;
 static UINT  g_uiFontMonoDpi = 0;
+static HFONT g_uiFontMonoBold = nullptr;   // add-on section 2: bold monospaced face for key tokens
+static UINT  g_uiFontMonoBoldDpi = 0;
 static HFONT UiFontMono(UINT dpi) {
     if (g_uiFontMono && g_uiFontMonoDpi == dpi) {
         return g_uiFontMono;
@@ -5606,6 +5803,25 @@ static HFONT UiFontMono(UINT dpi) {
                                FIXED_PITCH | FF_MODERN, L"Consolas");
     g_uiFontMonoDpi = dpi;
     return g_uiFontMono;
+}
+
+// add-on section 2: a BOLD monospaced face (Consolas, FW_SEMIBOLD) for the
+// inline keyboard tokens so the key text reads bold inside its chip surface.
+// Same -16 px size + FIXED_PITCH as UiFontMono so token widths stay aligned.
+static HFONT UiFontMonoBold(UINT dpi) {
+    if (g_uiFontMonoBold && g_uiFontMonoBoldDpi == dpi) {
+        return g_uiFontMonoBold;
+    }
+    if (g_uiFontMonoBold) {
+        DeleteObject(g_uiFontMonoBold);
+        g_uiFontMonoBold = nullptr;
+    }
+    g_uiFontMonoBold = CreateFontW(ScaleDpi(-16, dpi), 0, 0, 0, FW_SEMIBOLD, FALSE,
+                                   FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                   CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY,
+                                   FIXED_PITCH | FF_MODERN, L"Consolas");
+    g_uiFontMonoBoldDpi = dpi;
+    return g_uiFontMonoBold;
 }
 
 // fix thse isseue.md (nav-help typography): an ITALIC companion to UiFont --
@@ -5628,6 +5844,47 @@ static HFONT UiFontItalic(UINT dpi) {
                                  DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     g_uiFontItalicDpi = dpi;
     return g_uiFontItalic;
+}
+
+// Spec section 6 typography: dedicated faces so the help card renders the full
+// size hierarchy instead of reusing one body face -- a ~13 px FW_BOLD (700)
+// face for SECTION headings and a ~11 px italic face for SECONDARY NOTES. Same
+// lazily-cached, DPI-refreshed pattern as the other UiFont* helpers (recreated
+// whenever the DPI changes, so WM_DPICHANGED stays correct).
+static HFONT g_uiFontSection = nullptr;
+static UINT  g_uiFontSectionDpi = 0;
+static HFONT UiFontSection(UINT dpi) {
+    if (g_uiFontSection && g_uiFontSectionDpi == dpi) {
+        return g_uiFontSection;
+    }
+    if (g_uiFontSection) {
+        DeleteObject(g_uiFontSection);
+        g_uiFontSection = nullptr;
+    }
+    g_uiFontSection = CreateFontW(ScaleDpi(-19, dpi), 0, 0, 0, FW_BOLD, FALSE,
+                                  FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY,
+                                  DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    g_uiFontSectionDpi = dpi;
+    return g_uiFontSection;
+}
+
+static HFONT g_uiFontNote = nullptr;
+static UINT  g_uiFontNoteDpi = 0;
+static HFONT UiFontNote(UINT dpi) {
+    if (g_uiFontNote && g_uiFontNoteDpi == dpi) {
+        return g_uiFontNote;
+    }
+    if (g_uiFontNote) {
+        DeleteObject(g_uiFontNote);
+        g_uiFontNote = nullptr;
+    }
+    g_uiFontNote = CreateFontW(ScaleDpi(-15, dpi), 0, 0, 0, FW_NORMAL, TRUE,
+                               FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                               CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY,
+                               DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    g_uiFontNoteDpi = dpi;
+    return g_uiFontNote;
 }
 
 // ---- Popup theme palette ----
@@ -6149,6 +6406,43 @@ struct NamePromptData {
     int  helpScrollY = 0;                 // Overflow card: vertical scroll offset of the help content (device px); helpscroll::ClampScroll keeps it in range
     int  helpContentH = 0;                // Overflow card: measured FULL scrollable content height (device px), set by MeasureHelpCard
     int  helpViewportH = 0;               // Overflow card: scrollable viewport height (device px, heading band excluded), set by MeasureHelpCard
+    // Section-navigation chips (fix thse isseue.md section 3). The chip strip is
+    // painted FIXED under the header; these are its live geometry + state, set
+    // by PaintHelpCard/MeasureHelpCard and read by HelpCardWndProc for clicks,
+    // active tracking and horizontal strip scrolling (helpchips:: model).
+    int  helpSectionY[8] = {0};           // per-section content-Y anchors (device px), from MeasureHelpCard
+    int  helpSectionCount = 0;            // number of sections captured (== helpchips::Count())
+    int  helpActiveChip = 0;              // currently selected/active chip (0..count-1)
+    int  helpChipScrollX = 0;             // horizontal scroll offset of the (overflowing) chip strip, device px
+    int  helpChipCount = 0;               // chips laid out this paint
+    int  helpChipLeft[8] = {0};           // chip left edges in strip CONTENT coords (device px)
+    int  helpChipRight[8] = {0};          // chip right edges in strip CONTENT coords (device px)
+    int  helpChipStripW = 0;              // total chip strip width (device px)
+    int  helpChipVisibleW = 0;            // visible chip-band width (content area, device px)
+    int  helpChipViewX = 0;               // client-x where strip content-x 0 maps (before scroll)
+    int  helpChipBandTop = 0;             // client-y of the chip band top
+    int  helpChipBandBottom = 0;          // client-y of the chip band bottom
+    // Auto-hiding body scrollbar (fix thse isseue.md add-on section 4): the
+    // thumb reveals on interaction and hides after a short idle window via the
+    // tested sbauto:: model. A ONE-SHOT hide timer repaints exactly once when
+    // the window lapses -- no rapid repaint loop. The gutter stays reserved so
+    // showing/hiding never reflows the body.
+    unsigned long long helpSbRevealTick = 0;   // GetTickCount64() of the last scrollbar-reveal interaction
+    // GitHub author footer (fix thse isseue.md section 6). The footer's content-Y
+    // range (set while measuring) plus the live body-viewport client bounds (set
+    // while painting) let HelpCardWndProc hit-test a Ctrl + left-click on the
+    // footer link and open helpfooter::Url().
+    // add-on section 4: the author footer is a FIXED band at the card bottom
+    // (OUTSIDE the scrollable body). These are the Ashix TOKEN hit rect in
+    // CLIENT coords, set by PaintHelpFooter and read by HelpCardWndProc so a
+    // Ctrl + left-click OR a plain double left-click on the token opens the URL.
+    int  helpFooterLeft = -1;             // Ashix token left (client px); -1 = none
+    int  helpFooterRight = -1;            // Ashix token right (client px)
+    int  helpFooterTop = -1;              // Ashix token top (client px)
+    int  helpFooterBot = -1;              // Ashix token bottom (client px)
+    bool helpFooterHot = false;           // pointer is over the Ashix token (hover highlight)
+    int  helpBodyViewTop = 0;             // client-y of the scrollable body viewport top
+    int  helpBodyViewBottom = 0;          // client-y of the scrollable body viewport bottom
     HWND createBtn = nullptr;             // Create button (relayout target, Phase 7)
     HWND cancelBtn = nullptr;             // Cancel button (relayout target, Phase 7)
     HWND sizeToggle = nullptr;            // compact/expanded titlebar toggle (id 103, Group only)
@@ -8938,6 +9232,7 @@ static HBITMAP GetThumbnailForPaint(NamePromptData* d, HWND owner,
 // ============================================================================
 static const wchar_t kHelpCardClass[] = L"CtrlgNavHelpCard";
 static const UINT_PTR kHelpPumpTimer  = 114;   // wakes the modal pump so the grace-close fires even when the pointer stops moving
+static const UINT_PTR kHelpSbHideTimer = 115;  // ONE-SHOT: repaints once to hide the auto-hiding body scrollbar after the idle window (no repaint loop)
 
 // ONE authoritative pass that both MEASURES (paint=false) and PAINTS
 // (paint=true) the scrollable help content, so the measured content height and
@@ -8948,60 +9243,85 @@ static const UINT_PTR kHelpPumpTimer  = 114;   // wakes the modal pump so the gr
 // when they would cross the content right edge, so long help text never spills
 // out of the card. The caller clips to the viewport and offsets by the scroll.
 static int LayoutHelpContent(HDC hdc, NamePromptData* d, int contentW, bool paint,
-                             int originX, int originY, const ThemePalette& pal) {
+                             int originX, int originY, const ThemePalette& pal,
+                             int* sectionAnchorsOut = nullptr,
+                             int* sectionCountOut = nullptr) {
     const UINT dpi = d ? d->dpi : 96u;
     auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
-    HFONT body = UiFont(dpi);
-    HFONT bold = UiFontSemibold(dpi);
-    const int bodyLineH     = S(19);
-    const int sectionH      = S(22);
-    const int sectionGapTop = S(10);
-    const int dividerH      = S(13);
-    const int paraGap       = S(3);
-    const int spaceFallback = S(4);
+    HFONT body    = UiFont(dpi);
+    HFONT bold    = UiFontSemibold(dpi);
+    HFONT section = UiFontSection(dpi);
+    HFONT note    = UiFontNote(dpi);
+    const int bodyLineH      = S(19);
+    const int noteLineH      = S(17);
+    const int sectionH       = S(24);
+    const int sectionGapTop  = S(10);
+    const int sectionGapBottom = S(6); // add-on section 1: 6 px between a section heading and its FIRST content line
+    const int dividerPad     = S(12);  // spec section 6: 12 px above AND below the 1 px separator
+    const int paraGap        = S(4);   // add-on section 1: 4-6 px between related body/bullet lines (was 3)
+    const int spaceFallback  = S(4);
+    const int bulletIndent   = S(16);  // hanging indent for bulleted items
+    const int bulletDotR     = S(2);   // small filled bullet marker radius
     const int right = originX + contentW;
     int y = originY;
-    for (int i = 0; i < infohelp::LineCount(); ++i) {
-        const infohelp::Kind kind = infohelp::LineKind(i);
-        if (kind == infohelp::Kind::Divider) {
-            if (paint) {
-                HPEN dpen = CreatePen(PS_SOLID, 1, pal.cancelBorder);
-                HGDIOBJ opn = SelectObject(hdc, dpen);
-                const int dy = y + dividerH / 2;
-                MoveToEx(hdc, originX, dy, nullptr);
-                LineTo(hdc, right, dy);
-                SelectObject(hdc, opn);
-                DeleteObject(dpen);
-            }
-            y += dividerH;
-            continue;
-        }
-        if (kind == infohelp::Kind::Section) {
-            y += sectionGapTop;
-            if (paint) {
-                SetTextColor(hdc, pal.panelText);
-                HGDIOBJ of = SelectObject(hdc, bold);
-                RECT r = {originX, y, right, y + sectionH};
-                DrawTextW(hdc, infohelp::Line(i), -1, &r,
-                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-                SelectObject(hdc, of);
-            }
-            y += sectionH;
-            continue;
-        }
-        int x = originX;
+    int secIdx = 0;   // section index, for recording per-section content-Y anchors
+
+    // Shared word-wrap for Body / Bullet / Note rows: lays runs left-to-right
+    // from firstX, wrapping to lineStartX (a hanging indent for bullets) when a
+    // word would cross the right edge. forceFont overrides the per-run face
+    // (notes render entirely in the italic note face); otherwise each run picks
+    // mono / italic / bold / body. Advances the shared y and returns it.
+    auto drawRuns = [&](int lineIndex, int firstX, int lineStartX, int lineH,
+                        HFONT forceFont) -> int {
+        int x = firstX;
         bool anyOnLine = false;
-        for (const auto& run : infohelp::ParseRuns(infohelp::Line(i))) {
+        for (const auto& run : infohelp::ParseRuns(infohelp::Line(lineIndex))) {
             if (run.text.empty()) continue;
-            // fix thse isseue.md (nav-help typography): mono / italic / bold /
-            // body, all Windows-default faces (Consolas for `literal` key
-            // tokens, Segoe UI italic for _hints_, Segoe UI semibold for keys).
-            HFONT f = run.mono   ? UiFontMono(dpi)
+            HFONT f = forceFont  ? forceFont
+                    : run.mono   ? UiFontMonoBold(dpi)
                     : run.italic ? UiFontItalic(dpi)
                     : run.bold   ? bold
                     :              body;
             HGDIOBJ of = SelectObject(hdc, f);
             const std::wstring& t = run.text;
+            // Keyboard / inline-example token: draw the WHOLE mono run as one
+            // unbreakable rounded token with a THEME-AWARE surface (never white
+            // in dark mode -- helptoken:: model). forceFont rows (notes) opt out.
+            if (run.mono && !forceFont) {
+                SIZE tsz = {0, 0};
+                GetTextExtentPoint32W(hdc, t.c_str(),
+                                      static_cast<int>(t.size()), &tsz);
+                const int tokPadX = S(5);
+                const int boxW = tsz.cx + 2 * tokPadX;
+                if (anyOnLine && x + boxW > right) {
+                    x = lineStartX;
+                    y += lineH;
+                    anyOnLine = false;
+                }
+                if (paint) {
+                    const helptoken::Colors tc = helptoken::ForTheme(IsDarkMode());
+                    const int tokH = lineH - S(2);
+                    HBRUSH tbr = CreateSolidBrush(static_cast<COLORREF>(tc.bg));
+                    HPEN   tpn = CreatePen(PS_SOLID, 1,
+                                           static_cast<COLORREF>(tc.border));
+                    HGDIOBJ obT = SelectObject(hdc, tbr);
+                    HGDIOBJ opT = SelectObject(hdc, tpn);
+                    const int trad = S(4) * 2;
+                    RoundRect(hdc, x, y, x + boxW, y + tokH, trad, trad);
+                    SelectObject(hdc, opT);
+                    SelectObject(hdc, obT);
+                    DeleteObject(tbr);
+                    DeleteObject(tpn);
+                    SetTextColor(hdc, static_cast<COLORREF>(tc.text));
+                    RECT tr = {x, y, x + boxW, y + tokH};
+                    DrawTextW(hdc, t.c_str(), static_cast<int>(t.size()), &tr,
+                              DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                }
+                x += boxW + S(3);
+                anyOnLine = true;
+                SelectObject(hdc, of);
+                continue;
+            }
             size_t p = 0;
             while (p < t.size()) {
                 if (t[p] == L' ') {
@@ -9019,13 +9339,14 @@ static int LayoutHelpContent(HDC hdc, NamePromptData* d, int contentW, bool pain
                 GetTextExtentPoint32W(hdc, word.c_str(),
                                       static_cast<int>(word.size()), &wsz);
                 if (anyOnLine && x + wsz.cx > right) {
-                    x = originX;
-                    y += bodyLineH;
+                    x = lineStartX;
+                    y += lineH;
                     anyOnLine = false;
                 }
                 if (paint) {
                     SetTextColor(hdc, pal.panelText);
-                    TextOutW(hdc, x, y, word.c_str(), static_cast<int>(word.size()));
+                    TextOutW(hdc, x, y, word.c_str(),
+                             static_cast<int>(word.size()));
                 }
                 x += wsz.cx;
                 anyOnLine = true;
@@ -9033,8 +9354,80 @@ static int LayoutHelpContent(HDC hdc, NamePromptData* d, int contentW, bool pain
             }
             SelectObject(hdc, of);
         }
-        y += bodyLineH + paraGap;
+        return y + lineH;
+    };
+
+    for (int i = 0; i < infohelp::LineCount(); ++i) {
+        const infohelp::Kind kind = infohelp::LineKind(i);
+        if (kind == infohelp::Kind::Divider) {
+            if (paint) {
+                HPEN dpen = CreatePen(PS_SOLID, 1, pal.cancelBorder);
+                HGDIOBJ opn = SelectObject(hdc, dpen);
+                const int dy = y + dividerPad;
+                MoveToEx(hdc, originX, dy, nullptr);
+                LineTo(hdc, right, dy);
+                SelectObject(hdc, opn);
+                DeleteObject(dpen);
+            }
+            y += dividerPad * 2 + S(1);
+            continue;
+        }
+        if (kind == infohelp::Kind::Section) {
+            // Record this section's content-Y anchor (pre-gap) so a chip click
+            // can scroll it to the viewport top and active tracking can match.
+            if (sectionAnchorsOut && secIdx < 8) sectionAnchorsOut[secIdx] = y - originY;
+            ++secIdx;
+            y += sectionGapTop;
+            if (paint) {
+                SetTextColor(hdc, pal.panelText);
+                HGDIOBJ of = SelectObject(hdc, section);
+                RECT r = {originX, y, right, y + sectionH};
+                DrawTextW(hdc, infohelp::Line(i), -1, &r,
+                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+                SelectObject(hdc, of);
+            }
+            y += sectionH;
+            y += sectionGapBottom;   // add-on section 1: 6 px heading -> first content line
+            continue;
+        }
+        if (kind == infohelp::Kind::Note) {
+            // Secondary note: 11 px italic, whole line in the note face.
+            y = drawRuns(i, originX, originX, noteLineH, note);
+            y += paraGap;
+            continue;
+        }
+        if (kind == infohelp::Kind::Footer) {
+            // add-on section 4: the author footer is NO LONGER part of the
+            // scrollable body. It is painted in a FIXED band at the card bottom
+            // by PaintHelpFooter, so it is EXCLUDED from this measured content
+            // height / scroll range and never scrolls out of view. Skip it here.
+            continue;
+        }
+        if (kind == infohelp::Kind::Bullet) {
+            // Bulleted item: a small filled dot marker + hanging indent so
+            // wrapped lines align under the text, not under the bullet.
+            const int textX = originX + bulletIndent;
+            if (paint) {
+                HBRUSH db = CreateSolidBrush(pal.panelText);
+                HGDIOBJ ob = SelectObject(hdc, db);
+                HGDIOBJ op = SelectObject(hdc, GetStockObject(NULL_PEN));
+                const int cx = originX + S(5);
+                const int cy = y + bodyLineH / 2;
+                Ellipse(hdc, cx - bulletDotR, cy - bulletDotR,
+                        cx + bulletDotR, cy + bulletDotR);
+                SelectObject(hdc, op);
+                SelectObject(hdc, ob);
+                DeleteObject(db);
+            }
+            y = drawRuns(i, textX, textX, bodyLineH, nullptr);
+            y += paraGap;
+            continue;
+        }
+        // Body: 12 px, per-run faces, natural word wrap.
+        y = drawRuns(i, originX, originX, bodyLineH, nullptr);
+        y += paraGap;
     }
+    if (sectionCountOut) *sectionCountOut = secIdx;
     return y - originY;
 }
 
@@ -9044,6 +9437,192 @@ static int LayoutHelpContent(HDC hdc, NamePromptData* d, int contentW, bool pain
 // thumb is drawn in the reserved right-edge gutter ONLY when the content
 // overflows (helpscroll::NeedsScroll). Double buffered so scrolling never
 // flashes.
+// Paint the FIXED section-navigation chip strip (fix thse isseue.md section 3)
+// into [left,right) x [top,top+chipH). Measures each label, lays the chips out
+// with the tested helpchips:: model, persists the strip geometry onto d (for
+// click hit-testing + active tracking + horizontal scroll), clips to the inner
+// width and draws each chip with ONE muted neutral surface; the active chip
+// gets a 1 px accent outline (NOT a different fill) per the spec. The strip is
+// horizontally scrolled by d->helpChipScrollX so an overflowing row clips and
+// scrolls instead of wrapping or widening the card.
+static void PaintHelpChips(HDC hdc, NamePromptData* d, const ThemePalette& pal,
+                           int left, int right, int top, int chipH) {
+    if (!d) return;
+    const UINT dpi = d->dpi;
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    const int n    = helpchips::Count();
+    const int hpad = S(10);
+    const int gap  = S(6);
+    const int rad  = S(7);
+    const int visibleW = right - left;
+
+    HGDIOBJ ofChip = SelectObject(hdc, UiFontSemibold(dpi));
+    std::vector<int> widths;
+    widths.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        SIZE sz = {0, 0};
+        GetTextExtentPoint32W(hdc, helpchips::Label(i),
+                              lstrlenW(helpchips::Label(i)), &sz);
+        widths.push_back(sz.cx + 2 * hpad);
+    }
+    auto rects = helpchips::Layout(widths, gap, 0);
+    const int stripW = helpchips::TotalWidth(widths, gap);
+
+    // Persist geometry + clamp the horizontal offset (hit-testing / scroll).
+    d->helpChipCount      = n;
+    d->helpChipStripW     = stripW;
+    d->helpChipVisibleW   = visibleW;
+    d->helpChipViewX      = left;
+    d->helpChipBandTop    = top;
+    d->helpChipBandBottom = top + chipH;
+    for (int i = 0; i < n && i < 8; ++i) {
+        d->helpChipLeft[i]  = rects[i].left;
+        d->helpChipRight[i] = rects[i].right;
+    }
+    d->helpChipScrollX =
+        helpchips::ClampScrollX(d->helpChipScrollX, stripW, visibleW);
+
+    const bool dark = IsDarkMode();
+    const COLORREF chipBg     = dark ? RGB(62, 62, 66) : RGB(228, 228, 232);
+    const COLORREF chipBorder = dark ? RGB(86, 86, 92) : RGB(198, 198, 204);
+    const COLORREF chipAccent = RGB(0, 120, 215);
+
+    HRGN clip = CreateRectRgn(left, top, right, top + chipH);
+    SelectClipRgn(hdc, clip);
+    for (int i = 0; i < n; ++i) {
+        const int cl = left + (rects[i].left  - d->helpChipScrollX);
+        const int cr = left + (rects[i].right - d->helpChipScrollX);
+        if (cr <= left || cl >= right) continue;   // fully clipped off-strip
+        HBRUSH br = CreateSolidBrush(chipBg);
+        HPEN   pn = CreatePen(PS_SOLID, 1, chipBorder);
+        HGDIOBJ ob = SelectObject(hdc, br);
+        HGDIOBJ op = SelectObject(hdc, pn);
+        RoundRect(hdc, cl, top, cr, top + chipH, rad, rad);
+        SelectObject(hdc, op);
+        SelectObject(hdc, ob);
+        DeleteObject(br);
+        DeleteObject(pn);
+        if (i == d->helpActiveChip) {
+            // Selection = a crisp 1 px accent OUTLINE (same fill as the rest).
+            HPEN apn = CreatePen(PS_SOLID, 1, chipAccent);
+            HGDIOBJ aop = SelectObject(hdc, apn);
+            HGDIOBJ aob = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            RoundRect(hdc, cl, top, cr, top + chipH, rad, rad);
+            SelectObject(hdc, aob);
+            SelectObject(hdc, aop);
+            DeleteObject(apn);
+        }
+        SetTextColor(hdc, pal.panelText);
+        RECT tr = {cl, top, cr, top + chipH};
+        DrawTextW(hdc, helpchips::Label(i), -1, &tr,
+                  DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    }
+    SelectClipRgn(hdc, nullptr);
+    DeleteObject(clip);
+    SelectObject(hdc, ofChip);
+}
+
+// add-on section 4: the FIXED author-footer band height (DPI-scaled). The band
+// reserves, from the card bottom: a ~9 px gap, a 1 px divider, ~9 px of top
+// padding, one token-tall row and ~9 px of bottom padding. It is excluded from
+// the scrollable body viewport so the footer never scrolls out of view.
+static int HelpFooterBandH(UINT dpi) {
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    return S(9) + S(1) + S(9) + S(20) + S(9);
+}
+
+// Paint the FIXED author footer into [left,right) x [top,bottom). A thin 1 px
+// divider sits ~9 px below the scrollable body; below it the infohelp::
+// FooterText() runs render as: "Visit" in regular body text, the `Ashix`
+// backtick span as the SAME theme-aware rounded key token as the shortcut
+// tokens (bold mono, hover-aware) and the _Ctrl + Left-click to open_ span as a
+// smaller italic hint. The Ashix token's CLIENT rect is stored on d so
+// HelpCardWndProc can open the author URL on a Ctrl + left-click OR a plain
+// double left-click. The band stays OUTSIDE the scroll body (section 4).
+static void PaintHelpFooter(HDC hdc, NamePromptData* d, const ThemePalette& pal,
+                            int left, int right, int top, int bottom) {
+    if (!d) return;
+    (void)bottom;
+    const UINT dpi = d->dpi;
+    auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
+    const bool dark = IsDarkMode();
+
+    // Thin 1 px divider separating the footer from the scrollable body.
+    const int divY = top + S(9);
+    HPEN dpen = CreatePen(PS_SOLID, 1, pal.cancelBorder);
+    HGDIOBJ opn = SelectObject(hdc, dpen);
+    MoveToEx(hdc, left, divY, nullptr);
+    LineTo(hdc, right, divY);
+    SelectObject(hdc, opn);
+    DeleteObject(dpen);
+
+    const int lineH  = S(20);
+    const int rowTop = divY + S(9);
+    int x = left;
+
+    // Reset the stored token hit rect; recomputed when the token is drawn.
+    d->helpFooterLeft = d->helpFooterRight = -1;
+    d->helpFooterTop  = d->helpFooterBot   = -1;
+
+    for (const auto& run : infohelp::ParseRuns(infohelp::FooterText())) {
+        if (run.text.empty()) continue;
+        if (run.mono) {
+            // The Ashix key token: SAME surface/padding/radius/font as the body
+            // key tokens (helptoken:: model), with the restrained hover fill
+            // while the pointer is over it.
+            HGDIOBJ ofT = SelectObject(hdc, UiFontMonoBold(dpi));
+            SIZE tsz = {0, 0};
+            GetTextExtentPoint32W(hdc, run.text.c_str(),
+                                  static_cast<int>(run.text.size()), &tsz);
+            const int tokPadX = S(5);
+            const int boxW = tsz.cx + 2 * tokPadX;
+            const int tokH = lineH - S(2);
+            const helptoken::Colors tc = helptoken::ForTheme(dark);
+            const COLORREF fill = d->helpFooterHot
+                ? static_cast<COLORREF>(tc.hover)
+                : static_cast<COLORREF>(tc.bg);
+            HBRUSH tbr = CreateSolidBrush(fill);
+            HPEN   tpn = CreatePen(PS_SOLID, 1, static_cast<COLORREF>(tc.border));
+            HGDIOBJ obT = SelectObject(hdc, tbr);
+            HGDIOBJ opT = SelectObject(hdc, tpn);
+            const int trad = S(4) * 2;
+            RoundRect(hdc, x, rowTop, x + boxW, rowTop + tokH, trad, trad);
+            SelectObject(hdc, opT);
+            SelectObject(hdc, obT);
+            DeleteObject(tbr);
+            DeleteObject(tpn);
+            SetTextColor(hdc, static_cast<COLORREF>(tc.text));
+            RECT tr = {x, rowTop, x + boxW, rowTop + tokH};
+            DrawTextW(hdc, run.text.c_str(), static_cast<int>(run.text.size()),
+                      &tr, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+            d->helpFooterLeft  = x;
+            d->helpFooterRight = x + boxW;
+            d->helpFooterTop   = rowTop;
+            d->helpFooterBot   = rowTop + tokH;
+            x += boxW + S(3);
+            SelectObject(hdc, ofT);
+        } else {
+            // "Visit " in regular body text, or the smaller italic "Ctrl +
+            // Left-click to open" hint. Advance x by the measured width (so the
+            // inter-run spacing is preserved even where DrawText trims spaces).
+            const bool italic = run.italic;
+            HFONT f = italic ? UiFontNote(dpi) : UiFont(dpi);
+            HGDIOBJ of = SelectObject(hdc, f);
+            SetTextColor(hdc, italic
+                ? (dark ? RGB(150, 150, 150) : RGB(110, 110, 110))
+                : pal.panelText);
+            SIZE wsz = {0, 0};
+            GetTextExtentPoint32W(hdc, run.text.c_str(),
+                                  static_cast<int>(run.text.size()), &wsz);
+            RECT tr = {x, rowTop, x + wsz.cx + S(2), rowTop + lineH};
+            DrawTextW(hdc, run.text.c_str(), static_cast<int>(run.text.size()),
+                      &tr, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+            x += wsz.cx;
+            SelectObject(hdc, of);
+        }
+    }
+}
+
 static void PaintHelpCard(HWND hwnd, HDC targetDC, NamePromptData* d) {
     RECT rc; GetClientRect(hwnd, &rc);
     const UINT dpi = d ? d->dpi : 96u;
@@ -9072,30 +9651,40 @@ static void PaintHelpCard(HWND hwnd, HDC targetDC, NamePromptData* d) {
     DeleteObject(pen);
 
     SetBkMode(hdc, TRANSPARENT);
-    const int padX       = S(16);   // nav-help: match MeasureHelpCard (was 14)
-    const int padTop     = S(14);   // nav-help: match MeasureHelpCard (was 12)
-    const int headingH   = S(20);
-    const int headingGap = S(8);
-    const int padBottom  = S(14);   // nav-help: match MeasureHelpCard (was 12)
-    const int gutterW    = S(listscroll::kScrollbarW + 4);   // nav-help: REUSE the Selected Items thick scrollbar width (matches MeasureHelpCard)
-    const int headingBandH = padTop + headingH + headingGap;
+    const int padX          = S(16);                // spec: 16 px inner padding
+    const int padTop        = S(16);
+    const int headerH       = S(24);                // spec section 2: ~24 px header
+    const int headerToChips = S(12);                // spec: 12 px header-to-chips
+    const int chipH         = S(26);                // chip row height (5+5 vpad + text)
+    const int chipToContent = S(10);                // spec: 10 px chips-to-body
+    const int footerBandH   = HelpFooterBandH(dpi); // add-on section 4: fixed author-footer band at the card bottom
+    const int gutterW       = S(listscroll::kScrollbarW + 4);   // REUSE the Selected Items scrollbar width
+    const int headingBandH  = padTop + headerH + headerToChips + chipH + chipToContent;
+    const int contentX      = rc.left + padX;
 
-    // Fixed heading -- painted before the clip, so it never scrolls away.
+    // Fixed title "Help" -- painted before the clip, so it never scrolls away.
     SetTextColor(hdc, pal.panelText);
     HGDIOBJ ofTitle = SelectObject(hdc, UiFontSemibold(dpi));
-    RECT trc = {rc.left + padX, rc.top + padTop,
-                rc.right - padX, rc.top + padTop + headingH};
+    RECT trc = {contentX, rc.top + padTop,
+                rc.right - padX, rc.top + padTop + headerH};
     DrawTextW(hdc, infohelp::Heading(), -1, &trc,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     SelectObject(hdc, ofTitle);
 
-    // Scrollable content viewport (heading excluded, gutter reserved on right).
+    // Fixed section-navigation chip strip directly under the header. Clipped to
+    // the inner width and horizontally scrolled by helpChipScrollX so it never
+    // wraps or grows the card (helpchips:: model).
+    PaintHelpChips(hdc, d, pal, contentX, rc.right - padX,
+                   rc.top + padTop + headerH + headerToChips, chipH);
+
+    // Scrollable content viewport (header + chips excluded at the top, the
+    // FIXED author-footer band excluded at the bottom, gutter on right).
     const int viewTop    = rc.top + headingBandH;
-    const int viewBottom = rc.bottom - padBottom;
+    const int viewBottom = rc.bottom - footerBandH;
     const int viewportH  = (viewBottom > viewTop) ? (viewBottom - viewTop) : 0;
-    const int contentX   = rc.left + padX;
     const int contentW   = (rc.right - padX - gutterW) - contentX;
     const int scrollY    = d ? d->helpScrollY : 0;
+    if (d) { d->helpBodyViewTop = viewTop; d->helpBodyViewBottom = viewBottom; }
 
     HRGN clip = CreateRectRgn(contentX, viewTop, rc.right - padX, viewBottom);
     SelectClipRgn(hdc, clip);
@@ -9104,9 +9693,16 @@ static void PaintHelpCard(HWND hwnd, HDC targetDC, NamePromptData* d) {
     SelectClipRgn(hdc, nullptr);
     DeleteObject(clip);
 
-    // Theme-aware scrollbar thumb -- shown ONLY when the content overflows.
+    // Theme-aware body scrollbar thumb -- shown only when the content overflows
+    // AND the auto-hide reveal window is active (fix thse isseue.md add-on
+    // section 4, tested sbauto:: model). The gutter stays reserved regardless,
+    // so revealing/hiding the thumb never reflows the body.
     const int contentH = d ? d->helpContentH : 0;
-    if (helpscroll::NeedsScroll(contentH, viewportH)) {
+    const bool needsBar = helpscroll::NeedsScroll(contentH, viewportH);
+    const bool sbWithinReveal = d && sbauto::WithinRevealWindow(
+        d->helpSbRevealTick, GetTickCount64(), sbauto::kIdleHideMs);
+    if (sbauto::Visible(needsBar, /*dragging*/false,
+                        /*pointerInside*/false, sbWithinReveal)) {
         const int trackLeft  = rc.right - padX - gutterW + S(2);
         const int trackRight = rc.right - padX - S(2);
         const helpscroll::Thumb th = helpscroll::ThumbRect(
@@ -9124,6 +9720,12 @@ static void PaintHelpCard(HWND hwnd, HDC targetDC, NamePromptData* d) {
         DeleteObject(thumbBr);
     }
 
+    // add-on section 4: the FIXED author footer, painted LAST into the reserved
+    // bottom band (below the scrollable viewport) so it is always visible and
+    // never scrolls, regardless of the active section or scroll offset.
+    PaintHelpFooter(hdc, d, pal, contentX, rc.right - padX,
+                    rc.bottom - footerBandH, rc.bottom);
+
     if (memDC && bmp) {
         BitBlt(targetDC, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
         SelectObject(memDC, oldBmp);
@@ -9138,6 +9740,15 @@ static LRESULT CALLBACK HelpCardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                         LPARAM lParam) {
     NamePromptData* d = reinterpret_cast<NamePromptData*>(
         GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    // Reveal the auto-hiding body scrollbar on interaction and (re)arm the
+    // ONE-SHOT idle-hide timer (fix thse isseue.md add-on section 4). The timer
+    // repaints exactly once when the window lapses -- never a repaint loop.
+    auto revealSb = [&]() {
+        if (!d) return;
+        d->helpSbRevealTick = GetTickCount64();
+        SetTimer(hwnd, kHelpSbHideTimer,
+                 static_cast<UINT>(sbauto::kIdleHideMs), nullptr);
+    };
     switch (msg) {
         case WM_ERASEBKGND:
             return 1;   // fully painted in WM_PAINT -- no background erase flash
@@ -9149,20 +9760,165 @@ static LRESULT CALLBACK HelpCardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_MOUSEWHEEL: {
+            revealSb();
             // A wheel delivered directly to the card (e.g. "scroll inactive
-            // windows under the pointer") scrolls its content via the tested
-            // helpscroll model and is consumed -- never reflowed anywhere else.
+            // windows under the pointer") scrolls ONLY the help body via the
+            // tested helpscroll model and is consumed -- never reflowed anywhere
+            // else. Shift+wheel instead pans an OVERFLOWING chip strip. After a
+            // body scroll the active chip + its visibility are recomputed so the
+            // selected chip follows the primary visible section (helpchips::).
             if (d) {
                 const int delta =
                     static_cast<int>(static_cast<short>(HIWORD(wParam)));
+                const bool shift = (LOWORD(wParam) & MK_SHIFT) != 0;
+                const int step = ScaleDpi(40, d->dpi);
+                if (shift && d->helpChipStripW > d->helpChipVisibleW) {
+                    const int nx = helpchips::ClampScrollX(
+                        d->helpChipScrollX - (delta / 120) * step,
+                        d->helpChipStripW, d->helpChipVisibleW);
+                    if (nx != d->helpChipScrollX) {
+                        d->helpChipScrollX = nx;
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
+                    return 0;
+                }
                 const int maxScroll =
                     helpscroll::MaxScroll(d->helpContentH, d->helpViewportH);
-                const int pxPerNotch = ScaleDpi(40, d->dpi);
                 const int ny = helpscroll::OnWheel(d->helpScrollY, delta,
-                                                   pxPerNotch, maxScroll);
+                                                   step, maxScroll);
                 if (ny != d->helpScrollY) {
                     d->helpScrollY = ny;
+                    d->helpActiveChip = helpchips::ActiveSection(
+                        std::vector<int>(d->helpSectionY,
+                                         d->helpSectionY + d->helpSectionCount),
+                        d->helpScrollY, d->helpViewportH);
+                    std::vector<helpchips::Rect> cr;
+                    for (int i = 0; i < d->helpChipCount && i < 8; ++i)
+                        cr.push_back(helpchips::Rect{d->helpChipLeft[i],
+                                                     d->helpChipRight[i]});
+                    d->helpChipScrollX = helpchips::EnsureVisible(
+                        cr, d->helpActiveChip, d->helpChipScrollX,
+                        d->helpChipVisibleW, d->helpChipStripW);
                     InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+        case WM_MOUSEHWHEEL: {
+            revealSb();
+            // A horizontal wheel pans an overflowing chip strip (never the body).
+            if (d && d->helpChipStripW > d->helpChipVisibleW) {
+                const int delta =
+                    static_cast<int>(static_cast<short>(HIWORD(wParam)));
+                const int step = ScaleDpi(40, d->dpi);
+                const int nx = helpchips::ClampScrollX(
+                    d->helpChipScrollX + (delta / 120) * step,
+                    d->helpChipStripW, d->helpChipVisibleW);
+                if (nx != d->helpChipScrollX) {
+                    d->helpChipScrollX = nx;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+        case WM_MOUSEMOVE: {
+            // Pointer interaction reveals the auto-hiding scrollbar; the idle
+            // timer hides it again a short while after movement stops.
+            revealSb();
+            // add-on section 2: hover-highlight the interactive Ashix footer
+            // token while the pointer is over it (repaint only on state change).
+            if (d && d->helpFooterLeft >= 0) {
+                const int px = static_cast<int>(static_cast<short>(LOWORD(lParam)));
+                const int py = static_cast<int>(static_cast<short>(HIWORD(lParam)));
+                const bool hot = helpfooter::InsideFooter(
+                    px, py, d->helpFooterLeft, d->helpFooterRight,
+                    d->helpFooterTop, d->helpFooterBot);
+                if (hot != d->helpFooterHot) {
+                    d->helpFooterHot = hot;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+            return 0;
+        }
+        case WM_TIMER:
+            if (wParam == kHelpSbHideTimer) {
+                KillTimer(hwnd, kHelpSbHideTimer);
+                // Repaint EXACTLY ONCE to hide the thumb now the reveal window
+                // has lapsed (no repaint loop; the gutter stays reserved).
+                if (d && !sbauto::WithinRevealWindow(
+                             d->helpSbRevealTick, GetTickCount64(),
+                             sbauto::kIdleHideMs))
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
+            break;
+        case WM_LBUTTONDOWN: {
+            revealSb();
+            // A click on a section chip jumps the body to that section and marks
+            // the chip active (helpchips:: model). The card is a SEPARATE popup
+            // and the message is consumed, so this never scrolls the Selected
+            // Items list behind it.
+            if (d) {
+                const int px = static_cast<int>(static_cast<short>(LOWORD(lParam)));
+                const int py = static_cast<int>(static_cast<short>(HIWORD(lParam)));
+                if (py >= d->helpChipBandTop && py < d->helpChipBandBottom &&
+                    d->helpChipCount > 0) {
+                    const int contentXClick =
+                        (px - d->helpChipViewX) + d->helpChipScrollX;
+                    std::vector<helpchips::Rect> cr;
+                    for (int i = 0; i < d->helpChipCount && i < 8; ++i)
+                        cr.push_back(helpchips::Rect{d->helpChipLeft[i],
+                                                     d->helpChipRight[i]});
+                    const int chip = helpchips::HitTest(cr, contentXClick);
+                    if (chip >= 0) {
+                        std::vector<int> anchors(
+                            d->helpSectionY,
+                            d->helpSectionY + d->helpSectionCount);
+                        const int maxScrollY = helpscroll::MaxScroll(
+                            d->helpContentH, d->helpViewportH);
+                        d->helpScrollY =
+                            helpchips::ScrollTargetFor(anchors, chip, maxScrollY);
+                        d->helpActiveChip = chip;
+                        d->helpChipScrollX = helpchips::EnsureVisible(
+                            cr, chip, d->helpChipScrollX,
+                            d->helpChipVisibleW, d->helpChipStripW);
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
+                }
+                // add-on section 4: the author footer is a FIXED band at the
+                // card bottom (always visible). Open the k-ashix profile ONLY on
+                // a Ctrl + left-click directly on the Ashix TOKEN -- its client
+                // rect is stored by PaintHelpFooter. A plain single click never
+                // navigates (helpfooter::ShouldOpen).
+                if (d->helpFooterLeft >= 0 &&
+                    d->helpFooterRight > d->helpFooterLeft) {
+                    const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                    const bool inTok = helpfooter::InsideFooter(
+                        px, py, d->helpFooterLeft, d->helpFooterRight,
+                        d->helpFooterTop, d->helpFooterBot);
+                    if (helpfooter::ShouldOpen(ctrl, true, inTok)) {
+                        ShellExecuteW(nullptr, L"open", helpfooter::Url(),
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    }
+                }
+            }
+            return 0;
+        }
+        case WM_LBUTTONDBLCLK: {
+            revealSb();
+            // add-on section 4: a plain DOUBLE left-click on the Ashix token
+            // ALSO opens the author profile (no Ctrl required on this path);
+            // helpfooter::ShouldOpenDouble gates it to the token rect.
+            if (d && d->helpFooterLeft >= 0 &&
+                d->helpFooterRight > d->helpFooterLeft) {
+                const int px = static_cast<int>(static_cast<short>(LOWORD(lParam)));
+                const int py = static_cast<int>(static_cast<short>(HIWORD(lParam)));
+                const bool inTok = helpfooter::InsideFooter(
+                    px, py, d->helpFooterLeft, d->helpFooterRight,
+                    d->helpFooterTop, d->helpFooterBot);
+                if (helpfooter::ShouldOpenDouble(true, inTok)) {
+                    ShellExecuteW(nullptr, L"open", helpfooter::Url(),
+                                  nullptr, nullptr, SW_SHOWNORMAL);
                 }
             }
             return 0;
@@ -9183,16 +9939,18 @@ static LRESULT CALLBACK HelpCardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
     const UINT dpi = d ? d->dpi : 96u;
     auto S = [dpi](int v) { return ScaleDpi(v, dpi); };
-    const int padX        = S(16);   // nav-help: a touch more horizontal padding (was 14)
-    const int padTop      = S(14);   // nav-help: a touch more top padding (was 12)
-    const int headingH    = S(20);
-    const int headingGap  = S(8);
-    const int padBottom   = S(14);   // nav-help: a touch more bottom padding (was 12)
-    const int gutterW     = S(listscroll::kScrollbarW + 4);   // nav-help: REUSE the Selected Items thick scrollbar width (kScrollbarW) + a 2px inset each side, so the help thumb matches
-    const int headingBandH = padTop + headingH + headingGap;
+    const int padX        = S(16);   // spec: 16 px inner padding
+    const int padTop      = S(16);
+    const int headerH     = S(24);                 // spec section 2: ~24 px header
+    const int headerToChips = S(12);               // spec: 12 px header-to-chips
+    const int chipH       = S(26);                 // chip row height (matches PaintHelpCard)
+    const int chipToContent = S(10);               // spec: 10 px chips-to-body
+    const int footerBandH = HelpFooterBandH(dpi);  // add-on section 4: fixed author-footer band (excluded from the body viewport/scroll range)
+    const int gutterW     = S(listscroll::kScrollbarW + 4);   // REUSE the Selected Items scrollbar width
+    const int headingBandH = padTop + headerH + headerToChips + chipH + chipToContent;
     const int minW        = S(240);
-    const int maxCardW    = S(360);   // nav-help spec (fix thse isseue.md add-on section 2): 360 logical px wide at 96 DPI; the body wraps to it and never widens with content
-    const int maxCardH    = S(320);   // nav-help spec (fix thse isseue.md add-on section 2): 320 logical px MAX height at 96 DPI; taller content scrolls INTERNALLY, the card never grows past this
+    const int maxCardW    = S(376);   // nav-help spec (fix thse isseue.md add-on section 3): 360 + 16 = 376 logical px wide at 96 DPI; the extra width reduces wrapping and the body never widens past it
+    const int maxCardH    = S(340);   // nav-help spec (fix thse isseue.md add-on section 3): 320 + 20 = 340 logical px MAX height at 96 DPI; taller content scrolls INTERNALLY, the card never grows past this
     const int margin      = S(16);
 
     HDC hdc = GetDC(parent);
@@ -9215,7 +9973,7 @@ static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
         for (const auto& run : infohelp::ParseRuns(infohelp::Line(i))) {
             // Measure each run in the SAME face the renderer will draw it with
             // (mono / italic / bold / body) so the card width accounts for them.
-            HFONT mf = run.mono   ? UiFontMono(dpi)
+            HFONT mf = run.mono   ? UiFontMonoBold(dpi)
                      : run.italic ? UiFontItalic(dpi)
                      : (run.bold || section) ? bold
                      :              body;
@@ -9247,10 +10005,12 @@ static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
                        ? (out.cx - 2 * padX - gutterW) : 1;
     const ThemePalette pal = ResolveThemePalette(IsDarkMode());
     const int contentH =
-        LayoutHelpContent(hdc, d, contentW, false, 0, 0, pal);
+        LayoutHelpContent(hdc, d, contentW, false, 0, 0, pal,
+                          d ? d->helpSectionY : nullptr,
+                          d ? &d->helpSectionCount : nullptr);
     ReleaseDC(parent, hdc);
 
-    const int desiredH = headingBandH + contentH + padBottom;
+    const int desiredH = headingBandH + contentH + footerBandH;
     // fix thse isseue.md P1-4: bound the card to the FIXED maximum FIRST, then
     // to the monitor work area (the SMALLER of the two always wins), so the card
     // has a consistent configured maximum and never grows with its content.
@@ -9269,9 +10029,13 @@ static SIZE MeasureHelpCard(HWND parent, NamePromptData* d) {
 
     if (d) {
         d->helpContentH  = contentH;
-        d->helpViewportH = helpscroll::ViewportHeight(cardH, headingBandH, padBottom);
+        d->helpViewportH = helpscroll::ViewportHeight(cardH, headingBandH, footerBandH);
         d->helpScrollY   = helpscroll::ClampScroll(
             d->helpScrollY, helpscroll::MaxScroll(contentH, d->helpViewportH));
+        // Keep the active chip in sync with the (possibly re-clamped) scroll.
+        d->helpActiveChip = helpchips::ActiveSection(
+            std::vector<int>(d->helpSectionY, d->helpSectionY + d->helpSectionCount),
+            d->helpScrollY, d->helpViewportH);
     }
     return out;
 }
@@ -9281,6 +10045,7 @@ static void EnsureHelpCardClass(HINSTANCE hinst) {
     if (reg) return;
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
+    wc.style = CS_DBLCLKS;        // add-on section 4: deliver WM_LBUTTONDBLCLK so the Ashix footer token opens on a double-click
     wc.lpfnWndProc = HelpCardWndProc;
     wc.hInstance = hinst;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -9349,13 +10114,21 @@ static void ShowHelpCard(HWND parent, NamePromptData* d) {
     ShowWindow(d->helpCard, SW_SHOWNOACTIVATE);   // never steals folder-name focus
     InvalidateRect(d->helpCard, nullptr, FALSE);
     SetTimer(parent, kHelpPumpTimer, 60, nullptr);  // drive the grace-close poll
+    // Briefly reveal the auto-hiding body scrollbar on open, then let the
+    // one-shot timer hide it after the idle window (add-on section 4).
+    d->helpSbRevealTick = GetTickCount64();
+    SetTimer(d->helpCard, kHelpSbHideTimer,
+             static_cast<UINT>(sbauto::kIdleHideMs), nullptr);
 }
 
 static void HideHelpCard(HWND parent, NamePromptData* d) {
     if (!d) return;
     d->helpVis = static_cast<int>(infohelp::Vis::Hidden);
     d->helpCloseAtTick = 0;
-    if (d->helpCard) ShowWindow(d->helpCard, SW_HIDE);
+    if (d->helpCard) {
+        ShowWindow(d->helpCard, SW_HIDE);
+        KillTimer(d->helpCard, kHelpSbHideTimer);   // stop the idle-hide one-shot
+    }
     KillTimer(parent, kHelpPumpTimer);
 }
 
@@ -12594,6 +13367,24 @@ static bool PromptForFolderName(HWND owner, std::wstring& outBase,
                         data.helpScrollY, hdelta, hpx, hmax);
                     if (ny != data.helpScrollY) {
                         data.helpScrollY = ny;
+                        // Reveal the auto-hiding scrollbar + arm its one-shot
+                        // idle-hide timer for this scroll (add-on section 4).
+                        data.helpSbRevealTick = GetTickCount64();
+                        SetTimer(data.helpCard, kHelpSbHideTimer,
+                                 static_cast<UINT>(sbauto::kIdleHideMs), nullptr);
+                        // Keep the active chip + its visibility in step with the
+                        // manual scroll (section-navigation tracking).
+                        data.helpActiveChip = helpchips::ActiveSection(
+                            std::vector<int>(data.helpSectionY,
+                                             data.helpSectionY + data.helpSectionCount),
+                            data.helpScrollY, data.helpViewportH);
+                        std::vector<helpchips::Rect> cr;
+                        for (int i = 0; i < data.helpChipCount && i < 8; ++i)
+                            cr.push_back(helpchips::Rect{data.helpChipLeft[i],
+                                                         data.helpChipRight[i]});
+                        data.helpChipScrollX = helpchips::EnsureVisible(
+                            cr, data.helpActiveChip, data.helpChipScrollX,
+                            data.helpChipVisibleW, data.helpChipStripW);
                         InvalidateRect(data.helpCard, nullptr, FALSE);
                     }
                     continue;   // isolated: never reaches the list / chips / zoom
@@ -15311,7 +16102,7 @@ static LRESULT CALLBACK LowLevelKeybdProc(int nCode,
 BOOL WhTool_ModInit() {
     // Startup diagnostic. The version here MUST match the @version metadata
     // above.
-    Wh_Log(L"INIT: v0.12.69 ctrlg-group loaded");
+    Wh_Log(L"INIT: v0.12.70 ctrlg-group loaded");
     // Guard g_templates/g_templateCollision. Created BEFORE the first
     // LoadSettings() call (which publishes into them) and before the hook
     // starts, so no thread ever touches the CS uninitialised.
@@ -15339,6 +16130,11 @@ void WhTool_ModUninit() {
     if (g_uiFontMono) {
         DeleteObject(g_uiFontMono);
         g_uiFontMono = nullptr;
+    }
+    // add-on section 2: release the bold monospace key-token font.
+    if (g_uiFontMonoBold) {
+        DeleteObject(g_uiFontMonoBold);
+        g_uiFontMonoBold = nullptr;
     }
     // S14 (fix thse isseue.md v0.12.54): release the semibold title font too.
     if (g_uiFontSemibold) {
