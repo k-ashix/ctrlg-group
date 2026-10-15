@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id              ctrlg-group
-// @name            Ctrl+G to Group Folder/Files
-// @description     Ctrl+G makes Folder/Files
+// @name            Folder Creation & File Grouping
+// @description     Create single or batch folders with Ctrl+F+N, or group, copy and move selected files and folders with Ctrl+G. Includes folder templates, flexible naming, collision handling and Auto Grouping.
 // @version         0.12.70
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @include         windhawk.exe
+// @donateUrl       https://ko-fi.com/kashix
 // @compilerOptions -lole32 -loleaut32 -lshlwapi -lshell32 -luser32 -luuid -luiautomationcore -lgdi32 -ladvapi32 -ld2d1 -lcomctl32
 // ==/WindhawkMod==
 
@@ -41,22 +42,46 @@ nothing is created. Pressing **Enter** on an empty name is what keeps the
 default `New folder`. In the inline box, clicking away commits what you typed
 so far (like Explorer's own rename); the popup box commits with its Create button.
 
+#### ⌨️ Keyboard Shortcuts
+
+| # | Shortcut | Action |
+|---|---|---|
+| 🖱️ | **Mouse wheel** | Scroll the Selected Items. |
+| ↔️ | **Shift + wheel** \| Wheel | Scroll the summary chips. |
+| 🔍 | **Ctrl + wheel** | Switch between List, Large icons and Extra large icons. |
+| ↕️ | **Ctrl + E** | Toggle compact/expanded Popup till Manual Override. |
+| 📋 | **Copy \| Move** | Click a segment or focus the selector and press **Left \| Right** Arrow Keys. |
+| 🔀 | **Tab \| Shift + Tab** | Move between controls. |
+| ✅ | **Enter** | Its Show Time. |
+| ❌ | **Esc** | Cancel the operation. |
+| 📁 | **Ctrl + F + N** | Create New Folder. |
+| 📁 | **Ctrl + F + N + 9** | Creates **9** Folder. |
+| 📁 | **Ctrl + F + N + i** | Creates **Images** Template (e.g). |
+| 🗂️ | **Ctrl + G** | Group into Folder. |
+| 📋 | **Ctrl + G**, then **C** | Direct Quick Copy, when enabled and a valid destination exists. |
+| 📦 | **Ctrl + G**, then **M** | Direct Quick Move, when enabled and a valid destination exists. |
+
+- **🛡️ Destination folders:** Choose **Use existing**, **Numbered** or **Cancel** when the destination folder already exists. Existing folders are never overwritten.
+
+- **📄 File conflicts:** Choose **Ask**, **Replace**, **Skip** or **Compare** when a file with the same name already exists. Cancelled or failed operations are reported without partial changes.
+
+- **⚡ Quick Copy/Move** *(off by default)*  After grouping into a named folder at least once, press **Ctrl + G**, then **C** to copy or **M** to move directly to the last-used destination. Without a valid remembered destination, the normal Ctrl+G popup opens.
+
 ## ⚙️ Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| **Name folders with a popup box** | OFF (inline) | **OFF** (default) - folder opens in Explorer's inline rename box; type + Enter. Feels native. **ON** - a themed light/dark popup box; type + Create. Reliable, same in every folder. Both modes available; only affects Ctrl+F+N. |
+| **Name folders with a popup box** | OFF | **OFF** (default) - folder opens in Explorer's inline rename box; type + Enter. Feels native. **ON** - a themed light/dark popup box; type + Create. Reliable, same in every folder. Both modes available; only affects Ctrl+F+N. |
 | **Multiple folders in one go** | ON | ON (default): type a number right after the shortcut, then Enter (e.g. `5` -> five folders). No number = one; Esc cancels. **Folder templates fire regardless of this setting.** OFF: always one folder. |
 | **Max folders per run** | 25 | Cap per trigger. Range 1-100. |
 | **Auto-resolve name clashes** | ON | ON: numbers past existing folders (`New folder (2)`, `(3)`...) - a folder **every** time. OFF: only the plain `New folder`, so once it exists the shortcut does nothing. If it "only works once", turn this ON. |
-| **Open the new folder after creating it** | OFF | ON: browse into the new folder in the **same** window. Single-folder only|
+| **Open the new folder after creating it** | OFF | ON: browse into the newly created folder. Single-folder only|
 | **Type speed** | Normal | How long the box waits before it commits/cancels on its own. **Normal** ≈ 1.2s count / 30s name, **Relaxed** ≈ 2.5s / 60s, **Patient** ≈ 4s / 120s. Pick slower if the box closes too soon. |
 | **Batch numbering pattern** | `Project 1` | Number style for a named batch. All skip existing folders. |
-| **Folder templates** | *(empty)* | Your own fixed folder sets. Visit `Template Creation`. **Name is required** - a blank name is ignored.|
+| **Folder templates** | *Empty* | Your own fixed folder sets. Visit `Template Creation`. **Name is required** - a blank name is ignored.|
 | **Template name collisions** | Skip | For templates: `Skip` existing folders, `number` a sibling, or `stop` (create nothing). Overrides *Auto-resolve name clashes*. |
 
-**Naming:** one folder becomes `<name>`; several become a numbered batch whose
-style you pick with **Batch numbering pattern** (example base `New folder`):
+## **Naming:** one folder becomes `<name>`; several become a numbered batch whose style you pick with **Batch numbering pattern** (example base `New folder`):
 
 | Pattern | Result for base `New folder` |
 |---|---|
@@ -115,97 +140,59 @@ templates where you pre-define you folder names.)
 | | **Ctrl+F+N** *(default)* | **Ctrl+Shift+N** | **Ctrl+N** | **Ctrl+N+F** | **Ctrl+Q** |
 |---|---|---|---|---|---|
 | Keys | Hold Ctrl, tap F, then N | Single press | Single press | Hold Ctrl, tap N, then F | Single press |
-| Native feature in 🪟 | Ctrl+F (search) | New folder | New window | New window | (none) |
+| Native in 🪟 | Ctrl+F (search) | New folder | New window | New window | (none) |
 | Keeps native Explorer shortcut? | ✅ Ctrl+F search still opens if you don't press N | ➖ overlays the native New folder | ❌ replaces New window | ❌ replaces New window | ✅ uses a free key |
 | Accidental-trigger risk | Low (needs the F+N chord) | Low | Higher (single press) | Medium | Higher (single press) |
 | Naming + batch | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-## Ctrl+G - Group Creation 🤝 | Gathers the files/folders you have selected in File Explorer
+## Ctrl+G - Group Creation 🤝, Gathers the files | folders you have selected in File Explorer
 
--   1. Select anything in Explorer.
--   2. Press **Ctrl+G**.
--   3. In the popup, type a folder name, choose **Copy** or **Move**, and confirm.
+- Select anything in Explorer.
+- Press **Ctrl+G**.
+- In the popup, type a folder name, choose **Copy** or **Move**, and confirm.
+- Virtual / non-filesystem items (*This PC*, *Quick access*, ...) and an empty selection are ignored safely - nothing happens.
+- Destination - By default items are grouped under the **current parent** of the selection. 
+- Set a **Fixed destination folder** in Settings to always group somewhere specific.
+- If you leave the folder-name box **blank**, the last successfully used target name is reused. 
 
--   Virtual / non-filesystem items (*This PC*, *Quick access*, ...) and an empty
-selection are ignored safely - nothing happens.
-
-#### Destination - By default items are grouped under the **current parent** of the selection. 
-Set a **Fixed destination folder** in Settings to always group somewhere specific.
-If you leave the folder-name box **blank**, the last successfully used target
-name is reused. 
-
-## Auto Group - Sorts the selected files into folders named after their extensions (`JPG`, `PNG`, `MD`, ...)
-Auto Group ignores the typed name entirely and uses its own destination policy.
-
+## Auto Group - Sorts the selected files into folders
+- Auto Group directly group selected files into folders named on their extensions (`JPG`, `PNG`, `MD`, ...)
+- Auto Group **ignores** the typed name entirely and uses its own destination policy.
 - **Flat** layout creates the extension folders directly in the destination.
-- **Images parent** layout nests image extensions under an `Images` folder while
-  other extensions stay at the root.
-- Files **without an extension** go to a *No Extension* folder (optional), and
-  the originally selected folders can optionally move into an *All Folder*.
+- **Images parent** layout nests image extensions under an `Images` folder while other extensions stay at the root.
+- Files **without an extension** go to a *No Extension* folder (optional), and the originally selected folders can optionally move into an *All Folder*.
 
-#### Custom Auto Group rules
+## 🧩 Custom Auto Group Rules
 
-Add your own buckets under **Auto Grouping -> Custom Auto Group rules**, one rule
-per line:
+Add custom buckets under **Auto Grouping -> Custom Auto Group rules**. Enter one
+rule per line using this format:
 
-```
-FolderName=ext1|ext2|ext3
-```
+`FolderName=ext1|ext2|ext3`
 
-Examples:
+**Examples:**
 
-- `Photos=jpg|jpeg|png|gif|webp`
-- `Documents=pdf|doc|docx|txt|md`
-- `Source Code=cpp|h|hpp|js|ts|py`
-- `Archives=zip|7z|rar|tar|gz`
-
-**Matching is case-insensitive**, `jpeg` collapses to `jpg` like the built-in
-buckets, and the **first** rule wins when two rules list the same extension.
-Any extension not covered by a rule still goes to its normal extension folder,
-so an empty list keeps the standard one-folder-per-extension behaviour. Folder
-names are validated (invalid characters, reserved device names, and duplicate
-rule names are rejected). Under the **Images parent** layout, a rule that mixes
-image and non-image extensions is skipped (its files use the default folders)
-to avoid an ambiguous path.
-
-#### Keyboard shortcuts (in the popup)
-
-| Key | Action |
+| Rule | Extensions grouped |
 |---|---|
-| **Mouse wheel** | Scroll the Selected Items list. |
-| **Shift + wheel** | Pan the summary chips. |
-| **Ctrl + wheel** | Switch List / Large icons / Extra large icons (zooms the icon only). |
-| **Ctrl + E** | Toggle the compact / expanded content density. |
-| **Copy / Move** | Click a segment, or focus it and press Left/Right. |
-| **Tab / Shift+Tab** | Move between controls. |
-| **Enter** | Activate the focused action. |
-| **Esc** | Cancel. |
+| `Images=jpg\|jpeg\|png\|gif\|webp` | 🖼️ Images |
+| `Documents=pdf\|doc\|docx\|txt\|md` | 📄 Documents |
+| `Code=cpp\|tsx\|md\|js\|ts\|py` | 💻 Code |
+| `Archives=zip\|7z\|rar\|tar\|gz` | 📦 Archives |
 
-**Optional quick actions** (off by default): enable **Quick Copy/Move shortcuts
-(Ctrl+G then C or M)** in Settings. Once you have grouped into a named folder at
-least once, press **Ctrl+G** then **C** to Copy, or **Ctrl+G** then **M** to
-Move, straight to that last-used destination. If there is no remembered valid
-destination, Ctrl+G just opens the normal popup.
+- **🚧 Matching and validation:** Matching is case-insensitive, and `jpeg` is normalized to `jpg`. When multiple rules match an extension, the first rule wins. Unmatched extensions retain their default extension folders.
 
-#### Collision handling and safety
+- **⛑️ Safety:** Invalid folder names, reserved Windows device names and duplicate rule names are rejected. Under the **Images parent** layout, mixed image/non-image rules are skipped to avoid ambiguous paths.
 
-An existing destination folder is reused, never overwritten (*When the
-destination folder already exists*: Use existing / Numbered / Cancel). A file
-that already exists in the destination is handled by *When a file with the same
-name is already there* (Ask / Replace / Skip / Compare). Cancelled or failed
-operations are reported and make no partial change.
-
-#### Ctrl+G settings reference
+## 📂 Ctrl+G settings reference
 
 | Setting | Default | What it does |
 |---|---|---|
 | **Group Creation (Ctrl+G)** (`groupSelection`) | ON | Master on/off; OFF hands Ctrl+G back to Explorer. |
 | **Group by Move or Copy** | Copy | Copy keeps originals, Move relocates. |
-| **When the destination folder already exists** | Use existing | Use existing / Numbered / Cancel. |
-| **When a file with the same name is already there** | Ask | Ask / Replace / Skip / Compare. |
+| **When the destination folder already exists** | Use existing | Use existing \| Numbered \| Cancel. |
+| **When a file with the same name is already there** | Ask | Ask \| Replace \| Skip \| Compare. |
 | **Fixed destination folder** | *(empty)* | Always group here; blank = selection's parent. |
 | **Open destination after grouping** | OFF | ON opens the destination afterward. |
-| **Custom Auto Group rules** | *(empty)* | `FolderName=ext1|ext2` buckets for Auto Group. |
+| **Custom Auto Group rules** | *(empty)* | `FolderName=ext1\|ext2` buckets for Auto Group. |
 | **Quick Copy/Move shortcuts (Ctrl+G then C or M)** | OFF | Opt-in direct Copy/Move to the last used destination. |
 
 ### vs. Windows' built-in folder creation
@@ -219,14 +206,22 @@ Legend: ✅ yes · ❌ no · ➖ partial / not applicable.
 | Feature | **This mod** | Win right-click | Win Ctrl+Shift+N |
 |---|---|---|---|
 | Creates a folder | ✅ | ✅ | ✅ |
-| Keyboard-only (no mouse) | ✅ | ❌ | ✅ |
-| Names it in the same motion | ✅ inline **or** popup | ❌ | ❌ |
-| Batch: several at once | ✅ up to **100** | ❌ | ❌ |
-| Batch numbering styles | ✅ **6** (`1` `-01` `-001` `_01` `_001` `(01)`) | ❌ | ❌ |
-| Name-clash handling | ✅ number **or** skip | ➖ always numbers | ➖ always numbers |
-| Folder templates (fixed sets) | ✅ up to 26 keys | ❌ | ❌ |
-| Choice of shortcut | ✅ **6** options | ❌ fixed | ❌ fixed |
-| Light/dark themed popup | ✅ | ➖ | ➖ |
+| Keyboard-only workflow | ✅ | ❌ | ✅ |
+| Name during creation | ✅ inline **or** popup | ❌ | ❌ |
+| Multiple folders at once | ✅ up to **100** | ❌ | ❌ |
+| Configurable batch numbering | ✅ **6** (`1` `-01` `-001` `_01` `_001` `(01)`) | ❌ | ❌ |
+| Handle existing | ✅ number **or** skip | ➖ always numbers | ➖ always numbers |
+| Reusable folder templates | ✅ up to 26 keys | ❌ | ❌ |
+| Configurable folder-creation shortcuts | ✅ **6** options | ❌ fixed | ❌ fixed |
+| Group selected files into a named folder | ✅ | ❌ | ❌ |
+| Group selected folders | ✅ | ❌ | ❌ |
+| Choose Copy or Move while Grouping | ✅ | ❌ | ❌ |
+| Quick Copy/Move to the last destination | ✅ | ❌ | ❌ |
+| Automatically group files by extension | ✅ | ❌ | ❌ |
+| Custom extension-based grouping rules | ✅ | ❌ | ❌ |
+| Organize group extensions under a parent folder | ✅ | ❌ | ❌ |
+| Reuse existing destination folders | ✅ | ❌ | ❌ |
+| Theme-aware dedicated popup with Help | ✅ | ➖ | ➖ |
 
 ## 🙏 Credits
 
@@ -320,29 +315,22 @@ hook / worker-thread design. Credit and thanks to their authors:
     $name: Group Creation (Ctrl+G)
     $description: >-
       On (default): press Ctrl+G in File Explorer to group the selected
-      files/folders into one destination folder. Ctrl+G ALWAYS opens a small
-      popup FIRST - you type the folder name and pick Move/Copy there, then press
-      Create; nothing is created until you do. Ctrl+G is dedicated to grouping
-      only - it is separate from the New Folder shortcut and never creates a plain
-      folder. Off: Ctrl+G does nothing (Explorer keeps the key).
+      files/folders into the destination folder.
   - groupOperation: copy
     $name: Group by Move or Copy
     $description: >-
-      What Ctrl+G does with the selected items. Copy (default) leaves the
-      originals in place; Move relocates them into the destination folder. You
-      can still flip this per-group with the Move/Copy button in the popup.
+      Copy (default) leaves the originals in place; 
+      Move relocates them into the destination folder.
     $options:
-    - copy: Copy (default) - keep the originals where they are
-    - move: Move - relocate the selected items into the destination
+    - copy: Copy 
+    - move: Move 
   - groupCollision: useExisting
     $name: When the destination folder already exists
     $description: >-
-      Ctrl+G groups into a folder named by what you type in the popup. This
-      setting only matters when a folder with THAT name is already in the
-      destination. Use existing (default): drop the items into the folder that
-      is already there (nothing is overwritten) - best for grouping into the
-      same folder again and again. Numbered: leave the existing folder untouched
-      and make a fresh one beside it ("Trip", "Trip 2", ...). Cancel: do nothing.
+      This setting only matters when a folder with THAT name is already in the destination. 
+      Use existing (default): drop the items into the folder that is already there (nothing is overwritten) 
+      - best for grouping into the same folder again and again. 
+      Numbered: leave the existing folder untouched and make a fresh one beside it ("Trip", "Trip 2", ...). Cancel: do nothing.
       Note: this is about a same-named FOLDER; a same-named FILE inside the
       destination is handled by the next setting.
     $options:
@@ -366,31 +354,23 @@ hook / worker-thread design. Credit and thanks to their authors:
   - groupDestination: ""
     $name: Fixed destination folder (optional)
     $description: >-
-      Optional. Blank (default): Ctrl+G groups into the selection's own parent
-      folder, using the name you type in the popup. Set to a full folder path:
-      Ctrl+G always groups straight INTO that folder (the name you type is then
-      not used for the destination) - handy for always sorting into one fixed
-      place.
+      Blank (default): Set a folder path: Ctrl+G always groups straight INTO that folder, handy for always sorting into one fixed place.
   - groupOpenAfter: false
     $name: Open destination after grouping
     $description: >-
-      Off (default): stay where you are after grouping. On: open the destination
-      folder (in the active Explorer tab) once the items have been grouped.
+      Off (default): On: open the destination folder once the items have been grouped.
   $name: Group Creation (Ctrl+G)
 - AutoGrouping:
   - autoGroupEnabled: true
-    $name: Auto Group button
+    $name: Auto Group button behaviour
     $description: >-
-      Show the timed Auto Group button in the Ctrl+G popup. Auto Group sorts the
-      selected files into folders named after their extensions (JPG, PNG, MD,
-      ...) without you typing a folder name. The button becomes available after
-      a eight-second safety delay. Off: the button is not shown and normal Ctrl+G
-      grouping is unchanged.
+      Auto Group sorts the selected files into folders named based on their extensions (JPG, PNG, MD,
+      ...) without you typing a folder name. Off: the button is not shown and normal Ctrl+G grouping is unchanged.
   - autoGroupLayout: flat
     $name: Auto Group folder layout
     $description: >-
       Flat (default) creates extension folders directly in the destination.
-      Images parent groups image extensions (JPG, PNG, GIF, WEBP, ...) beneath an
+      Parent groups image extensions (JPG, PNG, GIF, WEBP, ...) beneath an
       Images folder, while other extension folders remain at the destination
       root.
     $options:
@@ -404,19 +384,14 @@ hook / worker-thread design. Credit and thanks to their authors:
   - autoGroupSelectedFolders: false
     $name: Group selected folders into All Folder
     $description: >-
-      Off (default): leave selected folders untouched. On: move the originally
-      selected folders into All Folder during Auto Group only. Generated
-      extension folders always remain at the destination root. This affects Auto
-      Group only - normal Ctrl+G Group and folder templates are unchanged.
+      Off leave selected folders untouched. On: move the originally
+      selected folders into All Folder during Auto Group only.
   - autoGroupFoldersName: "All Folder"
-    $name: All Folder directory name
-    $description: >-
-      Destination directory for selected folders when the optional
-      folder-grouping behavior above is enabled.
+    $name: Directory name where existing folders will be Grouped during Auto Grouping Only
   - autoGroupNoExtension: true
     $name: Group files without extensions
     $description: >-
-      On (default): put files without a usable extension into the No Extension
+      On will put files without a usable extension into the No Extension
       directory. Off: leave these files untouched.
   - autoGroupNoExtensionName: "No Extension"
     $name: No Extension directory name
@@ -426,7 +401,7 @@ hook / worker-thread design. Credit and thanks to their authors:
     - ""
     $name: Custom Auto Group rules
     $description: >-
-      Optional. One rule per line as FolderName=ext1|ext2|ext3 to route those
+      One rule per line as FolderName=ext1|ext2|ext3 to route those
       file extensions into a named bucket instead of the default per-extension
       folder (for example Photos=jpg|jpeg|png|gif or Documents=pdf|doc|docx|txt).
       Folder names are validated, matching is case-insensitive, the first rule
@@ -438,9 +413,7 @@ hook / worker-thread design. Credit and thanks to their authors:
     $description: >-
       Off (default). On: after you have grouped into a named folder at least
       once, press Ctrl+G then C to Copy, or Ctrl+G then M to Move, straight to
-      that last successfully used destination without retyping the name. If
-      there is no remembered valid destination, Ctrl+G just opens the normal
-      popup. Kept off by default to prevent accidental bulk operations.
+      that last successfully used destination. If there is no remembered valid destination, normal popup opens. 
   $name: Auto Grouping
 */
 // ==/WindhawkModSettings==
@@ -4616,38 +4589,44 @@ struct HelpLine { const wchar_t* text; Kind kind; };
 inline const HelpLine* Lines(int* count) {
     static const HelpLine kLines[] = {
         { L"Navigation", Kind::Section },
-        { L"**`Mouse wheel`** - Scroll the selected items", Kind::Body },
-        { L"**`Shift + Wheel`** - Scroll the summary chips horizontally", Kind::Body },
-        { L"**`Ctrl + Wheel`** - Switch between List, Large and Extra large icon views", Kind::Body },
-        { L"**Copy / Move** - Click a segment, or use **Left** / **Right** when focused", Kind::Body },
-        { L"**`Tab`** / **`Shift + Tab`** - Move between controls", Kind::Body },
-        { L"**`Enter`** - Activate the focused action", Kind::Body },
-        { L"**`Esc`** - Cancel the Group popup", Kind::Body },
-        { L"Image previews appear only in Large and Extra large views, once the thumbnail path is verified", Kind::Note },
+        { L" ", Kind::Note},
+        { L"**`Mouse wheel`** - Scroll Selected items", Kind::Bullet },
+        { L"**`Shift + Wheel`** - Scroll Chips", Kind::Bullet },
+        { L"**`Ctrl + Wheel`** - Switch between views List, **L** and **XL**", Kind::Bullet },
+        { L"**Copy | Move** - Choose, or use Arrows **←** **→** when focused", Kind::Bullet },
+        { L"**`Tab`****,** **`Shift + Tab`** - Move between controls", Kind::Bullet },
+        { L"**`Enter`** - Action Time", Kind::Bullet },
+        { L"**`Esc`** - Cancel", Kind::Bullet },
+        { L"Image previews appear only in Large and Extra large views", Kind::Note },
         { L"", Kind::Divider },
         { L"New Folder", Kind::Section },
+        { L" ", Kind::Note},
         { L"**Shortcut**: **`Ctrl + F + N`**", Kind::Body },
-        { L"**Single folder**: enter a name and confirm", Kind::Bullet },
-        { L"**Batch creation**: when enabled, type a count after the shortcut (e.g. `9` for nine), up to the limit", Kind::Bullet },
-        { L"**Naming**: inline naming is the default; popup naming is available in settings", Kind::Bullet },
-        { L"**Templates**: press an assigned template key to create its folder set", Kind::Bullet },
+        { L"**`Single folder`**: enter a name and confirm", Kind::Bullet },
+        { L"**`Batch creation`**: when enabled, type a count after the shortcut (e.g. `**9**` for nine), up to the limit", Kind::Bullet },
+        { L"**`Naming`**: inline naming is the default; popup naming is available in settings", Kind::Bullet },
+        { L"**`Templates`**: press an assigned template key to create its folder set", Kind::Bullet },
         { L"", Kind::Divider },
         { L"Group Creation", Kind::Section },
+        { L" ", Kind::Note},
         { L"**Shortcut**: **`Ctrl + G`**", Kind::Body },
-        { L"**Group**: enter a destination name, choose Copy or Move, confirm", Kind::Bullet },
-        { L"**Copy**: keep the originals", Kind::Bullet },
-        { L"**Move**: relocate the selected items", Kind::Bullet },
-        { L"**Blank name**: reuse the last used target name when that applies", Kind::Bullet },
-        { L"**Optional quick actions**: if enabled, **`Ctrl + G then C`** copies or **`Ctrl + G then M`** moves to the last destination", Kind::Body },
-        { L"Quick Copy/Move is setting-dependent and never active by default", Kind::Note },
+        { L"**`Group`**: enter a destination name, choose Copy or Move, confirm", Kind::Bullet },
+        { L"**`Copy`**: keep the originals", Kind::Bullet },
+        { L"**`Move`**: relocate the selected items", Kind::Bullet },
+        { L"**`Blank name`**: reuse the last used target name when that applies", Kind::Bullet },
+        { L"**Optional quick actions**", Kind::Body },
+        { L"**`Ctrl + G then C`** Copy", Kind::Bullet },
+        { L"**`Ctrl + G then M`** Move to the last destination", Kind::Bullet },
+        { L"Quick Copy | Move is setting-dependent", Kind::Note },
         { L"", Kind::Divider },
         { L"Auto Group", Kind::Section },
-        { L"**Auto Group**: organize selected files into folders by extension, with no folder name", Kind::Body },
-        { L"**Safety delay**: wait for the configured eight-second countdown before clicking Auto Group", Kind::Bullet },
-        { L"**Flat layout**: create extension folders directly in the destination", Kind::Bullet },
-        { L"**Images parent**: group image-extension folders beneath the configured Images parent", Kind::Bullet },
-        { L"**Custom rules**: let configured rules place matching extensions into named buckets", Kind::Bullet },
-        { L"The countdown never runs the operation on its own; some features may be disabled", Kind::Note },
+        { L" ", Kind::Note},
+        { L"**`Auto Group`**: Organize selected files into folders by extension", Kind::Body },
+        { L"**`Safety delay`**: Wait **→** Think **→** Click Auto Group", Kind::Bullet },
+        { L"**`Flat layout`**: Create extension folders directly in the destination", Kind::Bullet },
+        { L"**`Parent`**: Group image-extension folders beneath the configured Images parent (beta)", Kind::Bullet },
+        { L"**`Custom rules`**: Let configured rules place matching extensions into named buckets", Kind::Bullet },
+        { L"The countdown never runs the operation; some features may be disabled", Kind::Note },
         { L"Visit `Ashix` _Ctrl + Left-click to open_", Kind::Footer },
     };
     if (count) *count = static_cast<int>(sizeof(kLines) / sizeof(kLines[0]));
