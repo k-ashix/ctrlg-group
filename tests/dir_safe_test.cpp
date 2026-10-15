@@ -1,6 +1,6 @@
 // dir_safe_test.cpp
 // Pins the directory-safety decision for #2 (ShouldActOnDir, mirrored from the
-// worker's guard in explorer-ctrlfn-newfolder.wh.cpp).
+// worker's guard in ctrlg-group.wh.cpp).
 //
 // #2 (directory race): capturing the Explorer WINDOW + active TAB is still not
 // enough. The user can navigate the SAME tab (A -> B) between the trigger and

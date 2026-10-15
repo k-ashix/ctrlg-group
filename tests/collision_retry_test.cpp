@@ -1,6 +1,6 @@
 // collision_retry_test.cpp
 // Pins the create-collision decision (ShouldRetryOnCollision, mirrored from the
-// folder-create loop in explorer-ctrlfn-newfolder.wh.cpp).
+// folder-create loop in ctrlg-group.wh.cpp).
 //
 // Bug (#5): naming pre-checks with PathFileExistsW then CreateDirectoryW. Between
 // the check and the create another process can create the same directory, so the
