@@ -102,6 +102,451 @@ function AssertAtLeast ($label, $pattern, $min) {
 
 Head "PART 2: source invariants"
 
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 7 -- the Auto Group settings live in their OWN
+# top-level Windhawk settings category "Auto Grouping", separate from the
+# ordinary Ctrl+G "Group" category, and LoadSettings reads every auto-group
+# value from the AutoGrouping.* path (not the legacy Group.* path). Windhawk
+# keys stored settings by their full dotted path, so this is a structural fact
+# the (un-compilable) settings block + LoadSettings must satisfy.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 7: 'AutoGrouping' settings category declared"                '- AutoGrouping:'
+AssertPresent "Phase 7: 'Auto Grouping' category display name"                    '\$name: Auto Grouping'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupEnabled"         'AutoGrouping\.autoGroupEnabled'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupLayout"          'AutoGrouping\.autoGroupLayout'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupSelectedFolders" 'AutoGrouping\.autoGroupSelectedFolders'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupNoExtension"     'AutoGrouping\.autoGroupNoExtension'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupImageParentName" 'AutoGrouping\.autoGroupImageParentName'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupFoldersName"     'AutoGrouping\.autoGroupFoldersName'
+AssertPresent "Phase 7: LoadSettings reads AutoGrouping.autoGroupNoExtensionName" 'AutoGrouping\.autoGroupNoExtensionName'
+AssertAbsent  "Phase 7: no legacy Group.autoGroup* read paths remain"             'L"Group\.autoGroup'
+
+# --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 6 -- Custom Auto Group rules. A pure, unit-tested
+# parser/matcher (autogroup::ParseCustomRules / MatchCustomRule, mirrored into
+# the mod and covered by tests/auto_group_rules_test.cpp) is wired into the live
+# Auto Group path: a dedicated AutoGrouping.autoGroupCustomRules string-array
+# setting is declared + read in LoadSettings, and BuildPlan consults the parsed
+# rules. A unit test cannot see the settings/worker wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 6: custom-rule parser mirrored into the mod"             'inline ParsedRules ParseCustomRules\('
+AssertPresent "Phase 6: custom-rule matcher mirrored into the mod"            'inline RuleMatch MatchCustomRule\('
+AssertPresent "Phase 6: autoGroupCustomRules string-array setting declared"   '- autoGroupCustomRules:'
+AssertPresent "Phase 6: LoadSettings reads AutoGrouping.autoGroupCustomRules" 'AutoGrouping\.autoGroupCustomRules\[%d\]'
+AssertPresent "Phase 6: parsed rules fed into the Auto Group settings"        'st\.customRules = autogroup::ParseCustomRules'
+AssertPresent "Phase 6: BuildPlan consults the custom rules"                  'MatchCustomRule\(s\.customRules'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 4 -- OPT-IN Ctrl+G then C/M quick actions. The pure,
+# non-blocking two-stroke state machine (namespace qseq, mirrored from
+# tests/quick_action_logic.h and covered by tests/quick_action_test.cpp) is
+# present in the mod, and the feature is gated behind a dedicated opt-in setting
+# (default OFF) that LoadSettings reads into g_quickCopyMoveShortcuts. The live
+# interception inside the configurable low-level-hook chord engine is verified
+# on-device; these structural facts are pinned here.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 4: quick-action state machine mirrored into the mod"     'namespace qseq'
+AssertPresent "Phase 4: quick-action Ctrl+G arming helper mirrored"           'inline Decision OnCtrlG\('
+AssertPresent "Phase 4: quick-action key helper mirrored"                     'inline Decision OnKey\('
+AssertPresent "Phase 4: quickCopyMoveShortcuts opt-in setting declared"       '- quickCopyMoveShortcuts:'
+AssertPresent "Phase 4: setting defaults OFF (false)"                         'quickCopyMoveShortcuts: false'
+AssertPresent "Phase 4: LoadSettings reads AutoGrouping.quickCopyMoveShortcuts" 'AutoGrouping\.quickCopyMoveShortcuts'
+AssertAtLeast "Phase 4: quick-action flag declared + read"                    'g_quickCopyMoveShortcuts' 2
+
+# fix thse isseue.md top note ("green color is not good for auto group - keep it
+# same as group") -- the timed Auto Group button (id 120) uses the mirrored
+# agbtn appearance model: once Enabled it is painted IDENTICALLY to the ordinary
+# Group button (the create/primary tokens) and NEVER a dedicated green surface,
+# while the safety-delay (Waiting) state keeps the neutral Cancel surface + bold
+# countdown. The caption is always SEMIBOLD.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 5: agbtn appearance model mirrored into the mod"             'namespace agbtn'
+AssertPresent "Top note: id 120 enabled branch chooses the Group fill via agbtn"  'agbtn::UsesGroupFill\(st\)'
+AssertPresent "Top note: enabled Auto Group reuses the Group create tokens"       'fill = pressed \? pal\.createFillPressed : pal\.createFill;'
+AssertPresent "Top note: Auto Group waiting state keeps the neutral Cancel fill"  'fill = pressed \? pal\.cancelFillPressed : pal\.cancelFill;'
+AssertAbsent  "Top note: no dedicated Auto Group green palette fields remain"     'autoGroupFill'
+AssertAbsent  "Top note: no Auto Group green colour constants remain"             'kColAutoGroup'
+AssertAbsent  "Top note: no UsesGreenFill (green) decision remains in the mod"    'UsesGreenFill'
+AssertPresent "Phase 5A: Auto Group caption drawn with the semibold font"         'UiFontSemibold\(dpi\)\);\s*SetTextColor\(hdc, txt\);\s*DrawTextW\(hdc, L"Auto Group"'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase A -- Ctrl + Mouse Wheel cycles the Selected Items
+# presentation mode (List / Large icons / Extra large icons) via the mirrored
+# viewmode:: model. Normal wheel still scrolls; Shift+wheel still pans chips;
+# Ctrl beats Shift. The row/icon size the paint draws follows the view mode.
+# --------------------------------------------------------------------------
+AssertPresent "Phase A: viewmode presentation-mode model mirrored into the mod"   'namespace viewmode'
+AssertPresent "Phase A: NamePromptData carries the Selected Items view mode"       'viewmode::Mode selViewMode'
+AssertPresent "Phase A: Ctrl+wheel owns the Ctrl modifier (viewmode::ZoomsOnWheel)" 'viewmode::ZoomsOnWheel'
+AssertPresent "Phase A: Ctrl+wheel cycles the mode via viewmode::OnCtrlWheel"       'viewmode::OnCtrlWheel\(oldMode, zdelta\)'
+AssertPresent "Issue 5: chip-pan excludes Ctrl via the tested model (zoom wins)"    'return !WheelZooms\(ctrlDown, horizontal\) && overStrip;'
+AssertPresent "Phase A: the row height follows the view mode in the paint layer"    'viewmode::IsGrid\(vmode\)'
+AssertPresent "Phase A: the drawn row icon size scales with the view mode"          'viewmode::IconPx\(vmode\)'
+
+# fix thse isseue.md Phase 2: Large / Extra large are REAL responsive icon
+# grids (multiple items per row), not one tall single-column row per item. The
+# painter derives a column count from the live viewport width, feeds the shared
+# listscroll:: model GRID ROWS (so one scroll row == one grid row for the
+# visible range, overflow test, thumb and wheel/key paging), and expands each
+# visible grid row into selCols cells.
+AssertPresent "Phase 2: grid column count from live width (viewmode::Columns)"   'viewmode::Columns\(vmode,'
+AssertPresent "Phase 2: column count cached on the popup for the scroll handlers" 'd->selGridCols = selCols'
+AssertPresent "Phase 2: scroll model fed GRID ROWS, not item count (paint)"      'viewmode::GridRows\(itemCount, selCols\)'
+AssertPresent "Phase 2: overflow test uses grid rows"                            'NeedsScrollbar\(scrollRows'
+AssertPresent "Phase 2: wheel/key paging uses grid rows (modal loop)"            'viewmode::GridRows\(itemCount, scrollCols\)'
+AssertPresent "Phase 2: grid renderer lays selCols cells per grid row"           'gridRow \* selCols \+ c'
+AssertPresent "Phase 2: grid cell width from the tested viewmode model"          'viewmode::CellW\(vmode\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md UI-02 -- the Large / Extra large GRID cell height is the
+# shared viewmode::CellH model (icon + vertical padding + the fixed label band),
+# NOT the header line height rowH (= IconPx + 16, which reserves NO label band).
+# A grid cell sized by rowH clipped the filename drawn beneath the icon; CellH
+# reserves the label band for it, and the grid scroll capacity pages by the SAME
+# cell height so layout, paint and scrolling share one geometry model (UI-04).
+# A unit test cannot see which height the painter chose, so pin it here.
+AssertPresent "UI-02: grid cell height + scroll capacity use the shared viewmode::CellH model (no filename clip)" 'viewmode::CellH\(vmode\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md UI-01 / UI-05 -- the Group popup REFLOWS into the live
+# client rect when maximized or drag-resized, instead of staying at the fixed
+# compact/expanded size in the upper-left corner. The pure transform
+# layout::ReflowToClient (mirrored in tests/layout_logic.h, covered by
+# tests/win_reflow_test.cpp) stretches the content to the client width, grows
+# the Selected Items card by the extra height and shifts the lower sections +
+# footer down so the footer stays visible. A unit test cannot see the WM_SIZE /
+# WM_EXITSIZEMOVE wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "UI-01: responsive reflow transform mirrored into the mod"      'inline PromptLayout ReflowToClient\('
+AssertPresent "UI-01: a WM_SIZE handler relayouts the popup"                  'case WM_SIZE'
+AssertPresent "UI-01: WM_SIZE reflow is driven by the tested transform"       'layout::ReflowToClient\('
+AssertPresent "UI-01: reflow reuses ApplyPromptLayout via a layout override"  'ApplyPromptLayout\(hwnd, d, &reflowed\)'
+AssertPresent "UI-05: a drag-resize latches manualSized (preserve user size)" 'case WM_EXITSIZEMOVE'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md P0 (window geometry) -- the UI-01 reflow wiring was present,
+# but the two facts the resize + maximize model DEPENDS ON were only MODELLED,
+# never wired: the popup had no sizing frame (WS_THICKFRAME) so it could not be
+# drag-resized, and there was no WM_GETMINMAXINFO handler so maximizing a
+# borderless WS_POPUP covered the WHOLE monitor (over the taskbar). The old gate
+# asserted ReflowToClient/WM_SIZE/HTCAPTION but NOT these, so the gap stayed
+# green. Pin the now-wired geometry so it cannot silently reopen:
+#   * the Group popup carries a REAL sizing frame (WS_THICKFRAME) so the OS
+#     honours the edge/corner hit-tests and the user can drag any border;
+#   * a WM_GETMINMAXINFO handler clamps maximize to the monitor WORK AREA via the
+#     unit-tested winresize::ComputeMinMax model (taskbar respected) and sets a
+#     minimum track size so a resize can never crush the controls;
+#   * the Copy/Move segmented control reflows as a LEFT-anchored full-width pair
+#     (removed from the right-anchored moveX() set) so it no longer floats off to
+#     the right edge when the window widens.
+# A unit test cannot see the Win32 style/handler wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "P0: Group popup has a real sizing frame (WS_THICKFRAME)"        'WS_POPUP \| WS_THICKFRAME'
+AssertPresent "P0: a WM_GETMINMAXINFO handler constrains maximize"             'case WM_GETMINMAXINFO'
+AssertPresent "P0: maximize geometry comes from the tested winresize model"    'winresize::ComputeMinMax\('
+AssertPresent "P0: ComputeMinMax model mirrored into the mod"                  'inline MinMax ComputeMinMax\('
+AssertPresent "P0: maximize is clamped to the monitor WORK AREA (rcWork)"      'mi\.rcWork'
+AssertPresent "P0: minimum track size uses the tested minimum client size"     'winresize::MinClientW\(\)'
+AssertAbsent  "P0: Copy/Move segments are not right-anchored in reflow"        'moveX\(L\.segCopy\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md UI-03 / UI-06 -- the footer INFO/help button is a REAL,
+# visible, interactive control, not merely the (already-present) infohelp::
+# model. A real BS_OWNERDRAW button HWND (id 121) is created and stored on the
+# popup, laid out in the footer (L.infoButton), themed by the shared button
+# renderer, and its click drives the tested infohelp open/close state machine
+# (infohelp::OnClick) to show/hide a dedicated themed help panel HWND that
+# renders the summarized infohelp lines (infohelp::Line). A unit test cannot see
+# the HWND wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "UI-03: a real info-button HWND is created (id 121)"          'reinterpret_cast<HMENU>\(121\)'
+AssertPresent "UI-03: the info button is stored on the popup state"          'infoBtn'
+AssertPresent "UI-03: the info button has a footer layout rect"              'L\.infoButton'
+AssertPresent "UI-03: click wires the tested infohelp open/close model"      'infohelp::OnClick'
+AssertPresent "Issue 1: a dedicated non-activating help-card popup window"    'd->helpCard'
+AssertPresent "UI-06: the help surface renders the summarized infohelp lines" 'infohelp::Line\('
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md v0.12.65 Bug 1 -- a RESIZED / MAXIMIZED Group popup paints,
+# hit-tests AND moves its children from ONE authoritative "effective layout".
+# Before this fix the WM_ERASEBKGND card renderer and the WM_NCHITTEST title-bar
+# classifier both called layout::ComputePromptLayout(true, ...) directly -- the
+# PREFERRED compact/expanded layout -- while ApplyPromptLayout moved the children
+# to the live REFLOWED layout. So after a maximize / drag-resize the painted card
+# backgrounds stayed at the compact width while the Selected Items content, the
+# destination field and the Copy/Move segments stretched across the whole window
+# (the long horizontal bars OUTSIDE the card borders in both screenshots).
+# ComputeEffectiveLayout() returns the preferred layout for a normal popup and
+# the reflowed layout once the popup is manualSized / zoomed, and is consumed by
+# ApplyPromptLayout, WM_ERASEBKGND and WM_NCHITTEST alike -- so the card borders
+# can never drift out of sync with the controls inside them again. New Folder and
+# the initial preferred sizing are untouched (they are never manualSized/zoomed).
+# A unit test cannot see the handler wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "Bug1: one authoritative effective-layout helper for the Group popup" 'ComputeEffectiveLayout\('
+AssertAtLeast "Bug1: effective layout feeds paint, hit-test AND child-move"         'ComputeEffectiveLayout\(hwnd, d\)' 3
+AssertAbsent  "Bug1: no Group paint/hit-test path uses the PREFERRED layout directly" 'ComputePromptLayout\(true,'
+AssertPresent "Bug1: the effective layout reflows through the tested transform"     'layout::ReflowToClient\('
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Issue 4 -- a maximized / zoomed Group popup must not leave a
+# large blank band below the last row of the Selected Items card. ReflowToClient
+# only pours the extra height into the card when the preferred layout was
+# ROW-CAPPED (a selection with more items than its viewport shows); a small
+# selection keeps its content height (selGrow == 0) so the lower sections keep
+# their natural spacing. The row math is unit-tested in win_reflow_test.cpp.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 4: reflow caps the Selected card growth to its content"        'selGrow'
+AssertPresent "Issue 4: a non-row-capped selection does not stretch the card"       'if \(dy > 0 && !selRowCapped\) selGrow = 0;'
+AssertPresent "Issue 4: the card height grows only by the content-capped amount"    'L\.selectedContent\.h \+= selGrow;'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Issue 2 -- image-ONLY thumbnail previews in the Large /
+# Extra large grid views. The tested thumbs:: model gates eligibility (raster
+# images only, never folders/PDF/video/etc.) and aspect-fits the preview; the
+# live Win32 glue extracts real thumbnails via IShellItemImageFactory on a
+# background worker (SIIGBF_THUMBNAILONLY, so non-images simply fail -> the Shell
+# icon fallback), caches them and frees the worker + bitmaps on teardown. The
+# full path is captured on each item for extraction. On-device verified.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 2: image-thumbnail model mirrored into the mod"                'namespace thumbs'
+AssertPresent "Issue 2: grid paint gates thumbnails on the tested image model"      'thumbs::WantsThumbnailFor'
+AssertPresent "Issue 2: thumbnails extracted via the Shell image factory"           'IShellItemImageFactory'
+AssertPresent "Issue 2: image-ONLY extraction (THUMBNAILONLY, never a shell icon)"  'SIIGBF_THUMBNAILONLY'
+AssertPresent "Issue 2: paint uses the async, cached, non-blocking lookup"          'GetThumbnailForPaint\('
+AssertPresent "Issue 2: thumbnails are aspect-fit (never stretched)"                'thumbs::FitRect\('
+AssertPresent "Issue 2: the full path is captured for thumbnail extraction"         'it\.path = sel\[i\]'
+AssertPresent "Issue 2: the worker + bitmaps are freed on popup teardown"           'StopThumbThread\(&data\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Issue 5 -- a plain mouse wheel OVER the summary-chip strip
+# pans the chips WITHOUT requiring Shift (Shift + wheel and WM_MOUSEHWHEEL stay
+# supported; Ctrl keeps the view-mode zoom). The decision is the tested
+# location-aware viewmode::WheelPansChips model, and the old Shift-gated chip-pan
+# condition is gone, so one event is never both a chip pan and a list scroll.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 5: chip-pan routing uses the tested location-aware model"      'viewmode::WheelPansChips\(wheelCtrl, overChipStrip, wheelHoriz\)'
+AssertPresent "Issue 5: horizontal wheel (WM_MOUSEHWHEEL) still pans the strip"      'wheelHoriz'
+AssertAbsent  "Issue 5: chip pan no longer REQUIRES a Shift+wheel"                   'WM_MOUSEWHEEL && \(GetKeyState\(VK_SHIFT\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Issue 6 -- the Group popup remembers its last size,
+# position and maximize state for the next Ctrl+G open (session lifetime). The
+# tested winplace:: model clamps the restored rect onto the current monitor work
+# area (nearest-monitor fallback) and captures the NORMAL rect ONLY while not
+# maximized, so a maximize never overwrites the restore size. New Folder is
+# untouched.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 6: remembered-placement model mirrored into the mod"           'namespace winplace'
+AssertPresent "Issue 6: the restored rect is clamped to the monitor work area"      'winplace::ClampToWork\('
+AssertPresent "Issue 6: NORMAL rect captured only when not maximized"               'winplace::ShouldCaptureNormal\('
+AssertPresent "Issue 6: placement is restored before the popup is shown"            'ApplyRememberedNormalPlacement\(hwnd, &data\)'
+AssertPresent "Issue 6: a maximized session reopens maximized"                      'GroupPlacementMaximized\(\)'
+AssertPresent "Issue 6: size/position is remembered on resize/move/maximize"        'RememberGroupPlacement\(hwnd, d\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Issue 7 -- the Auto Group countdown button no longer
+# flashes. The per-tick repaint was already gated to whole-second / enabled
+# changes (agcd::ShouldRepaint, InvalidateRect with erase=FALSE on the button
+# only); the remaining flash was the button owner-draw doing a full-rect panel
+# FillRect straight to the control DC before the rounded surface. It is now
+# DOUBLE-BUFFERED: panel fill -> rounded surface -> countdown composite off-screen
+# and reach the control in ONE BitBlt. Theme-token backgrounds + the safety delay
+# are unchanged.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 7: the Auto Group countdown button is double-buffered"         'CreateCompatibleBitmap\(realDC, bbW, bbH\)'
+AssertPresent "Issue 7: the composed button is flushed in ONE BitBlt (no flash)"    'BitBlt\(realDC, dis->rcItem.left, dis->rcItem.top, bbW, bbH,'
+AssertPresent "Issue 7: countdown repaints only on a whole-second/state change"     'agcd::ShouldRepaint\('
+AssertPresent "Issue 7: the countdown repaint never erases (erase=FALSE)"           'InvalidateRect\(d->autoGroupBtn, nullptr, FALSE\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md v0.12.65 Bug 2 -- clicking the footer "?" button must leave
+# the help panel VISIBLE instead of flashing it and hiding it. The help panel
+# (SS_OWNERDRAW id 122) and the Selected Items list (SS_OWNERDRAW id 110) are
+# OVERLAPPING sibling children at the same rect. With no WS_CLIPSIBLINGS the OS
+# does not honour their Z order while painting, so the list repainted straight
+# over the just-shown panel -- the "flash then disappear". Both overlapping
+# siblings now carry WS_CLIPSIBLINGS, and the id-121 click brings the panel to
+# the top of the sibling Z order, so it stays up until a second click dismisses
+# it (the infohelp::OnClick click-to-pin model is already unit-tested). A unit
+# test cannot see the window style wiring, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "Issue 1: the help card is a SEPARATE non-activating popup window"     'WS_EX_NOACTIVATE'
+AssertPresent "Issue 1: the help card has its own window class + WndProc"            'HelpCardWndProc'
+AssertPresent "Issue 1: the help card is created on demand (EnsureHelpCard)"         'EnsureHelpCard\('
+AssertPresent "Issue 1: hover/click open the card (transient infohelp model)"        'ShowHelpCard\('
+AssertPresent "Issue 1: the grace-close is armed by the tested infohelp predicate"   'infohelp::ShouldArmClose'
+AssertPresent "Issue 1: the grace timer resolves via the tested infohelp predicate"  'infohelp::OnCloseTimer'
+AssertPresent "Issue 1: the '?' button is a green pill (bold white glyph)"           'pressed \? kColConfirmPressed : kColConfirm'
+AssertPresent "Issue 1: the '?' button exposes the accessible name 'Navigation help'" 'SetWindowTextW\(d->infoBtn, infohelp::AccessibleName\(\)\)'
+AssertPresent "Issue 1: the help renderer uses the tested bold-run parser"           'infohelp::ParseRuns'
+AssertAbsent  "Issue 1: the old id-122 help overlay child is gone"                    'reinterpret_cast<HMENU>\(122\)'
+AssertAbsent  "Issue 1: the old helpPanel overlay field is gone"                      'helpPanel'
+AssertAbsent  "Issue 1: the pinned help state is gone"                                'Vis::Pinned'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md "Overflow and Scrollable Help Card" -- the Navigation Help
+# card stays compact: it is capped against the current monitor work area and its
+# body scrolls INTERNALLY when the content overflows, with a theme scrollbar, a
+# FIXED heading, and wheel isolation (a wheel over the card scrolls the card and
+# never the Selected Items list or the summary chips). The pixel math is the
+# unit-tested helpscroll:: model; the Win32 wiring below cannot be unit-tested,
+# so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "Overflow card: the scroll/sizing model is mirrored into the mod"      'namespace helpscroll'
+AssertPresent "Overflow card: one authoritative measure+paint content pass"          'LayoutHelpContent\('
+AssertPresent "Overflow card: card dimensions are capped to the monitor work area"   'helpscroll::CapToWorkArea'
+AssertPresent "Overflow card: the scrollable viewport excludes the fixed heading"    'helpscroll::ViewportHeight'
+AssertPresent "Overflow card: the scrollbar thumb shows ONLY on overflow"            'helpscroll::NeedsScroll'
+AssertPresent "Overflow card: the theme scrollbar thumb uses the tested geometry"    'helpscroll::ThumbRect'
+AssertPresent "Overflow card: the body is clipped to the viewport (heading fixed)"   'SelectClipRgn'
+AssertPresent "Overflow card: a wheel over the card is isolated from list/chips"     'helpscroll::WheelTargetsHelpCard'
+AssertPresent "Overflow card: wheel scrolling uses the tested helpscroll step"       'helpscroll::OnWheel'
+AssertPresent "Overflow card: the renderer switches on the tested line Kind"         'infohelp::LineKind\('
+AssertPresent "Overflow card: the full navigation help now includes Auto Grouping"   'organize selected files into folders by extension'
+AssertAtLeast "Overflow card: the scroll offset drives paint AND the wheel sites"    'helpScrollY' 3
+AssertPresent "Overflow card: a FIXED max size caps the card (never grows with content)" 'helpscroll::CapToMax'
+# fix thse isseue.md add-on section 2 -- the approved 96-DPI design dimensions:
+# width 360, MAX height 320 (DPI-scaled by S()); a practical MINIMUM height of
+# 180 floors a short card (helpscroll::CapToMin), itself clamped to the work
+# area. Pins the exact spec so the card can neither widen with content nor grow
+# past 320, and never collapses below the readable floor.
+AssertPresent "Add-on section 2: a practical MINIMUM height floors the card"        'helpscroll::CapToMin'
+AssertPresent "Add-on section 2: the 180 logical px minimum height is applied"      'minCardH = S\(180\)'
+AssertPresent "Add-on section 5: an open help card re-anchors + re-measures at the new DPI (WM_DPICHANGED)" 'if \(d->helpVis\) PositionHelpCard\(hwnd, d\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md section 3 + add-on section 3 -- the fixed section-navigation
+# chip strip (Navigation / New Folder / Group Creation / Auto Group). The chip
+# pixel decisions are the unit-tested helpchips:: model (help_chips_test); the
+# Win32 wiring below cannot be unit-tested, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "Chips: the section-navigation chip model is mirrored into the mod" 'namespace helpchips'
+AssertPresent "Chips: the fixed chip strip is painted under the header"           'PaintHelpChips\('
+AssertPresent "Chips: a click hit-tests the chip strip (tested model)"            'helpchips::HitTest'
+AssertPresent "Chips: clicking a chip jumps the body to its section"              'helpchips::ScrollTargetFor'
+AssertPresent "Chips: the active chip follows the primary visible section"        'helpchips::ActiveSection'
+AssertPresent "Chips: an overflowing strip clips + scrolls (ensure-visible)"      'helpchips::EnsureVisible'
+AssertPresent "Chips: the strip never grows the card -- it clamps horizontally"   'helpchips::ClampScrollX'
+AssertPresent "Chips: per-section content-Y anchors are captured while measuring" 'sectionAnchorsOut'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md add-on section 2 -- theme-aware inline keyboard tokens are
+# a HIGH-CONTRAST INVERSE chip: DARK theme uses a MUTED MID-GREY (#D1CFC0, easy
+# on the eyes) surface with dark-grey (#1F1F1F) text (never pure white); LIGHT
+# theme a deep-charcoal (#171717) surface with white text. Colours are the unit-tested helptoken::
+# model (help_token_test); the paint wiring below cannot be unit-tested, so pin
+# it here. The key text itself is drawn in a BOLD monospaced face.
+# --------------------------------------------------------------------------
+AssertPresent "Tokens: the theme-aware token-colour model is mirrored into the mod" 'namespace helptoken'
+AssertPresent "Tokens: inline key tokens are painted with the theme-aware surface"  'helptoken::ForTheme'
+AssertPresent "Tokens: the key text uses the BOLD monospaced face (add-on section 2)" 'static HFONT UiFontMonoBold'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md add-on section 4 -- the help body scrollbar auto-hides: it
+# reveals on interaction and hides after a short idle window via the tested
+# sbauto:: model, with a ONE-SHOT timer that repaints once (never a repaint
+# loop). The reserved gutter means hiding never reflows the body.
+# --------------------------------------------------------------------------
+AssertPresent "Scrollbar: the help body thumb uses a reveal tick for auto-hide"    'helpSbRevealTick'
+AssertPresent "Scrollbar: a ONE-SHOT idle-hide timer repaints once (no loop)"      'kHelpSbHideTimer'
+AssertPresent "Scrollbar: visibility is gated by the tested reveal window"         'sbauto::WithinRevealWindow'
+AssertPresent "Scrollbar: the thumb show/hide uses the tested sbauto::Visible"     'sbauto::Visible'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md add-on section 4 -- the author footer is a FIXED band at
+# the card bottom (OUTSIDE the scrollable body) with the `Ashix` key token. The
+# URL + the open gestures (Ctrl+left-click AND plain double left-click) are the
+# unit-tested helpfooter:: model (help_footer_test); pin the wiring here.
+# --------------------------------------------------------------------------
+AssertPresent "Footer: the author-footer model is mirrored into the mod"           'namespace helpfooter'
+AssertPresent "Footer: a Kind::Footer line carries the author footer"              'Kind::Footer'
+AssertPresent "Footer: the Ashix token text is sourced from infohelp::FooterText" 'infohelp::FooterText'
+AssertPresent "Footer: it is painted in a FIXED band OUTSIDE the scroll body"      'PaintHelpFooter'
+AssertPresent "Footer: the fixed band is reserved + excluded from the viewport"    'HelpFooterBandH'
+AssertPresent "Footer: the link opens on the tested Ctrl+left-click gesture"       'helpfooter::ShouldOpen'
+AssertPresent "Footer: it ALSO opens on a plain double left-click (add-on sec 4)"  'helpfooter::ShouldOpenDouble'
+AssertPresent "Footer: the class enables double-clicks (CS_DBLCLKS)"               'CS_DBLCLKS'
+AssertPresent "Footer: the gesture opens the k-ashix profile URL"                  'ShellExecuteW\(nullptr, L"open", helpfooter::Url\(\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md v0.12.68 -- blank grid on Ctrl+Wheel zoom, scroll position
+# across a view switch, and Selected Items overlap. The mode-aware pixel
+# decisions are the unit-tested viewmode:: model (grid_fit_test); the Win32
+# wiring below cannot be unit-tested, so pin it here.
+# --------------------------------------------------------------------------
+AssertPresent "v0.12.68 #1: a grid viewport reserves >= 1 WHOLE cell (never blank)" 'viewmode::SelectedGridVisibleRows'
+AssertPresent "v0.12.68 #1: a view switch recomputes the layout in ALL states"      'ApplyPromptLayout\(hwnd, &data\)'
+AssertPresent "v0.12.68 #1: largest-mode-that-fits fallback helper mirrored"         'LargestModeThatFits\('
+AssertPresent "v0.12.68 #1: one-whole-cell minimum helper mirrored"                  'MinSelectedContentH\('
+AssertPresent "v0.12.68 #2: the view switch captures the first visible item"         'viewmode::FirstVisibleItem'
+AssertPresent "v0.12.68 #2: the paint converts it to the new mode's top row"         'viewmode::TopRowForItem'
+AssertPresent "v0.12.68 #2: pending view-switch scroll-conversion state"             'pendingFirstItem'
+AssertPresent "v0.12.68 #3: reflow floor = header block + one whole row (mode-aware)" 'kMinSelReflowH = selHeaderBlockH \+ selRowH'
+AssertAbsent  "v0.12.68 #3: the magic 40px Selected-Items reflow floor is gone"      'kMinSelReflowH = 40'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase B -- a more substantial, auto-hiding Selected Items
+# scrollbar: a thicker rounded thumb (gutter 14 / ~12px thumb), ~8px breathing
+# room before the gutter, and the thumb painted only while the pointer is in the
+# viewport or within the reveal window after the last scroll (sbauto:: model),
+# faded by a one-shot idle timer. The gutter stays reserved so nothing reflows.
+# --------------------------------------------------------------------------
+AssertPresent "Phase B: scrollbar auto-hide model mirrored into the mod"            'namespace sbauto'
+AssertPresent "Phase B: thicker scrollbar gutter (14 design px)"                     'kScrollbarW = 14'
+AssertPresent "Phase B: 8px breathing room between size metadata and the gutter"     'kMetaScrollGap = 8'
+AssertPresent "Phase B: the gutter reserves barW + the 8px meta gap (no reflow)"     'barW \+ metaGap'
+AssertPresent "Phase B: the thumb is painted only when sbauto::Visible is true"      'sbauto::Visible\('
+AssertPresent "Phase B: list scrolling arms the one-shot idle-hide timer (id 113)"   'SetTimer\(hwnd, 113'
+AssertPresent "Phase B: the idle-hide timer fires and hides the scrollbar"           'wParam == 113'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase C -- a footer information/help button. The mirrored
+# infohelp:: model is the single source of truth for the accessible name, the
+# SUMMARIZED single-line help content (top note: a summarized info button, 5-6
+# single lines), the hover + click-to-pin open/close logic, and the footer-fit
+# math so the button never pushes the actions off the popup.
+# --------------------------------------------------------------------------
+AssertPresent "Phase C: info/help button model mirrored into the mod"              'namespace infohelp'
+AssertPresent "Issue 1: info button accessible name is the spec string"             'L"Navigation help"'
+AssertPresent "Overflow card: help content is the full navigation help, kind-tagged" 'enum class Kind \{ Section, Body, Bullet, Note, Divider, Footer \}'
+AssertPresent "Issue 1: help documents the Ctrl+wheel view modes (bold key span)"   'Switch between List, Large and Extra large icon views'
+AssertPresent "Phase C: hover->card continuity (StaysOpen) so there is no flicker"  'inline bool StaysOpen'
+AssertPresent "Issue 1: hover OR click opens the card (OnClick, NOT a pin toggle)"  'inline Vis OnClick'
+AssertPresent "Phase C: footer-fit keeps the actions on the popup"                  'FooterFitsWithInfo'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase D -- Copy/Move keyboard navigation. Left/Right change
+# the selection only while a segment owns focus (segmented::OnKey, gated by
+# segFocused); Enter/Space/click select the segment via segmented::OnClickSegment
+# and return 0 (NO popup submit, no double-submit); d->isMove stays the single
+# source of truth the worker reads back.
+# --------------------------------------------------------------------------
+AssertPresent "Phase D: segment keyboard uses the tested segmented::OnKey model"    'segmented::OnKey\('
+AssertPresent "Phase D: arrows act ONLY while a segment owns focus"                  'segFocused &&'
+AssertPresent "Phase D: click/Enter/Space select the segment via OnClickSegment"     'segmented::OnClickSegment\(clicked\)'
+AssertPresent "Phase D: the segment selection sets d->isMove (single source)"        'd->isMove = segmented::ToIsMove\(segmented::OnClickSegment'
+
+# --------------------------------------------------------------------------
+# ADD-ON (fix thse isseue.md) Phase F -- the Auto Group worker executes the
+# FULL plan, not just the file buckets:
+#   * it pre-creates every planned directory IN ORDER, so the Images parent
+#     exists before its child image bucket (CreateFolderWithShellElevation
+#     makes a single leaf only and fails if the parent is missing), and a
+#     plain FILE occupying a bucket path is detected and skipped, never
+#     overwritten;
+#   * it MOVES the originally selected folders into the All Folder directory
+#     -- always a Move, even when the file operation is Copy (spec section 7).
+# These are worker / filesystem facts a pure unit test cannot observe, so they
+# are gated here as source invariants.
+AssertPresent "AutoGroup pre-creates planned dirs so a parent precedes its child bucket (Phase F)" 'blockedDirs'
+AssertPresent "AutoGroup executes the selected-folder (All Folder) move (Phase F)"                 'std::vector<CapturedItem> folderItems;'
+AssertPresent "AutoGroup tracks folders routed into All Folder (Phase F)"                          'foldersMoved'
+AssertPresent "AutoGroup moves selected folders even when files are Copied (Phase F)"              'const bool kFolderMove = true;'
+AssertPresent "AutoGroup folder move reuses the safe executor into All Folder (Phase F)"           'PerformGroupOperation\(folderItems, allDir, kFolderMove, owner\)'
+
+
 # Folder creation (not file creation) is the whole point of this mod.
 AssertPresent "creates a real directory (CreateDirectoryW)"   'CreateDirectoryW'
 AssertPresent "elevated create uses FILE_ATTRIBUTE_DIRECTORY" 'FILE_ATTRIBUTE_DIRECTORY'
@@ -253,7 +698,7 @@ AssertAbsent  "no folder-glyph icon column in the path field (#2 no-icon)" 'dest
 # reduced path field copies the resolved path to the clipboard (id 111).
 AssertPresent "layout model has a copy-path button rect (#2)"   'Rect destCopyBtn;'
 AssertPresent "copy-path button control is created (#2)"        'd->destCopyBtn = CreateWindowExW'
-AssertPresent "copy-path button relayout target (#2)"           'deferMove\(d->destCopyBtn'
+AssertPresent "copy-path button relayout target (#2)"           'queueMove\(d->destCopyBtn'
 AssertPresent "copy-path button writes the path to the clipboard (#2)" 'CopyPathToClipboard'
 # fix thse isseue.md (path pass): the Copy button is theme-aware -- owner-drawn
 # by the SAME renderer as Create/Cancel (id 111 routed into that WM_DRAWITEM
@@ -351,7 +796,7 @@ AssertPresent "submit-caption model distinguishes Group vs Create (#4)"      'Su
 # Expanded / DPI reflow moves the NEW section controls too (Phase 7): the one
 # relayout path repositions the Destination + Status controls, not just the
 # original form, so expand and monitor-DPI changes keep every card aligned.
-AssertPresent "relayout moves the Destination field"           'deferMove\(d->destField'
+AssertPresent "relayout moves the Destination field"           'queueMove\(d->destField'
 AssertAbsent  "relayout no longer moves a Status label (#1)"   'deferMove\(d->statusLabel'
 
 # fix thse isseue.md P0 #2 + S12 (v0.12.52): NEITHER EDIT control is HRGN-clipped
@@ -527,9 +972,12 @@ AssertPresent "Selected Items list uses SS_OWNERDRAW"          'SS_OWNERDRAW'
 AssertPresent "list rows use tested listcol:: column model"    'listcol::NameWidth'
 AssertPresent "list name width derives from the LIVE row width (#1)" 'listcol::NameWidthFrom\(\s*rowRight - left'
 AssertAbsent  "list name width no longer uses the fixed compact content width (#1)" 'kContentW - layout::kCardInset'
-AssertPresent "list row name cell uses tested sel:: model"     'sel::RowName'
-AssertPresent "list counts breakdown uses tested sel:: model"  'sel::SummaryCounts'
-AssertPresent "Selected Items summary is an actionable type breakdown (#11)" 'sel::TypeBreakdown'
+AssertPresent "list row name cell uses tested sel:: model (live owner-draw)" 'sel::RowDisplayName\('
+AssertPresent "chip model built from the live selection (#2/#3)"  'chipmodel::Build\('
+# NOTE (fix thse isseue.md #2/#3): the plain-text sel::TypeBreakdown summary
+# line was REPLACED by the interactive chipmodel chip strip. sel::TypeBreakdown
+# is kept as a model but no longer painted; the chip strip is the summary now.
+AssertPresent "Selected Items summary uses the chipmodel chip strip (#2/#3)" 'chipmodel::Build\(d->items\)'
 AssertPresent "Selected Items list draws a visible scrollbar thumb (#4)" 'listscroll::ThumbRect'
 AssertPresent "scrollbar gutter reserved via tested listscroll:: model (#4)" 'listscroll::(TrackRect|ContentWidth)'
 
@@ -599,6 +1047,23 @@ AssertPresent "row Shell flags come from the tested helper (#9)"     'shellicon:
 AssertPresent "no-disk type lookup flag is set (#9)"                 'kSHGFI_USEFILEATTRIBUTES\s*=\s*0x000000010'
 AssertPresent "row Shell icon is drawn via DrawIconEx (#9)"          'DrawIconEx\(hdc, ix, iy, rsfi\.hIcon'
 AssertPresent "row Shell icon handle is freed after draw (#9)"       'DestroyIcon\(rsfi\.hIcon\)'
+
+# fix thse isseue.md Phase 1: the GRID modes (Large / Extra large) no longer
+# upscale a 16px small icon. They source a crisp HICON from the system
+# image-list TIER chosen by the mirrored iconsrc:: model (SHIL_EXTRALARGE 48 /
+# SHIL_JUMBO 256) via SHGetFileInfoW(SHGFI_SYSICONINDEX) -> SHGetImageList ->
+# IImageList::GetIcon, downsample it, and CACHE it per (type,tier,dpi) on the
+# popup so scrolling/zooming reuse one source and teardown frees every handle.
+AssertPresent "Phase 1: iconsrc source-tier model mirrored into the mod"         'namespace iconsrc'
+AssertPresent "Phase 1: paint selects the DPI-aware source tier"                 'iconsrc::SelectTier\(vmode, d->dpi\)'
+AssertPresent "Phase 1: grid icon sourced from the cached hi-res extractor"      'GetCachedShellIcon\('
+AssertPresent "Phase 1: extraction uses the system-image-index path (no disk)"   'SHGFI_SYSICONINDEX'
+AssertPresent "Phase 1: tier image list obtained via SHGetImageList"             'SHGetImageList'
+AssertPresent "Phase 1: crisp icon pulled from the tier image list (IImageList)" 'IID_IImageList'
+AssertPresent "Phase 1: cached hi-res source drawn (downsampled) in grid modes"  'DrawIconEx\(hdc, ix, iy, shIcon'
+AssertPresent "Phase 1: per-popup icon cache stored on NamePromptData"           'std::vector<std::pair<std::wstring, HICON>> iconCache'
+AssertPresent "Phase 1: cached icons released on popup teardown (no GDI leak)"    '~NamePromptData\(\)'
+
 AssertAbsent  "no status-icon vector ids remain after removal (#1)"  'icons::IconId::Status'
 
 # fix thse isseue.md #1: the Status card ICON and its status::ToneFor colour
@@ -611,9 +1076,12 @@ AssertAbsent  "no status icon tone colour model (#1)"                'status::To
 AssertPresent "badge X padding is 8 (#11)"                           'kPadX   = 8'
 AssertPresent "badge Y inset is 3 (#11)"                             'kPadY   = 3'
 AssertPresent "badge minimum pill width is 32 (#11)"                 'kMinW   = 32'
-AssertPresent "badge fill is a soft per-extension chip (#12)"        'badgecolor::ChipForLabel\(ex, dark\)'
+# NOTE (fix thse isseue.md Phase 1B): the badgecolor:: category table + the
+# listbadge:: pill geometry are STILL mirrored and unit-tested, so the category
+# switch stays pinned here. The Selected Items rows no longer PAINT a separate
+# EXT pill (the extension is shown inline in the filename), so the pill-paint
+# pins were replaced by the inline-rendering invariants above.
 AssertPresent "badge colour categories mirrored into the mod (#12)"  'case Cat::Document:'
-AssertPresent "unknown extensions inherit the themed chip (#12)"     'if \(!chip\.inherit\)'
 
 # Pass5 S11 (fix thse isseue.md #13): final 4/8px spacing cleanup -- the one
 # off-grid inter-control gap (action row + chrome strip) is cleaned 6 -> 8.
@@ -682,8 +1150,12 @@ AssertPresent "resize is logged for diagnosis (PromptResize) (#9)"  'PromptResiz
 # borderless WS_POPUP and paints its OWN title bar (title + Expand/Minimize/
 # Close) that drags via WM_NCHITTEST. The pure hit classification is unit-tested
 # (titlebar_logic_test); the Win32 wiring a unit test cannot see is pinned here.
+# fix thse isseue.md P0 (manual resize): the group branch now also carries
+# WS_THICKFRAME (optional "(" before WS_POPUP), but it is still WS_POPUP-based
+# with NO native WS_CAPTION -- the custom title bar is preserved. The sizing
+# frame itself is pinned by the dedicated P0 invariant above.
 AssertPresent "custom title-bar model mirrored (#2)"                 'namespace titlebar'
-AssertPresent "Group popup is a borderless WS_POPUP title bar (#2)"  'data\.isGroup\s*\?\s*WS_POPUP'
+AssertPresent "Group popup is a borderless WS_POPUP title bar (#2)"  'data\.isGroup\s*\?\s*\(?\s*WS_POPUP'
 AssertPresent "popup create uses the chosen title-bar style (#2)"    'winStyle,'
 AssertPresent "title-bar Minimize control created (id 104) (#1/#2)"  'd->minBtn = CreateWindowExW'
 AssertPresent "title-bar Close control created (id 105) (#2)"        'd->closeBtn = CreateWindowExW'
@@ -733,13 +1205,15 @@ AssertPresent "destfield border policy mirrored into the mod (#6)"  'destfield::
 AssertPresent "Destination field path is ellipsized to the field (#6)" 'ApplyDestFieldText'
 AssertPresent "destination path uses a real path ellipsis (#6)"     'PathCompactPathW'
 
-# fix thse isseue.md #5: the Selected Items extension column is a visual BADGE
-# (a rounded pill behind the uppercased ext), so a row reads [icon] name [EXT]
-# size. The pill geometry + show/hide are unit-tested (list_badge_logic_test);
-# the owner-draw pill paint is pinned here.
-AssertPresent "ext column is a tested badge pill (#5)"              'listbadge::BadgeRect'
-AssertPresent "ext badge shown only when an ext exists (#5)"        'listbadge::ShowBadge'
-AssertPresent "ext badge width uses the tested pill model (#5)"     'listbadge::BadgeWidth'
+# fix thse isseue.md Phase 1B: the Selected Items metadata column shows the SIZE
+# badge for files with a known size (showext::RowShowsSize), ALWAYS visible. The
+# Show-extensions toggle no longer paints a separate EXT pill -- it switches the
+# filename between the stem and the COMPLETE filename rendered INLINE
+# (sel::RowDisplayName), and the name column reclaims the vacated EXT width.
+AssertPresent "size badge gated by the tested showext model (#1)"     'showext::RowShowsSize'
+AssertPresent "row name honors the Show-extensions toggle inline (#1B)"       'sel::RowDisplayName\(it\.name, it\.isFolder, extInline\)'
+AssertPresent "inline-extension decision uses the tested showext model (#1B)" 'showext::RowShowsExtInline\(d->showExt, it\.isFolder\)'
+AssertPresent "name column reclaims the EXT width when extensions are inline (#1B)" 'd->showExt \? 0 : S\(listcol::kExtW\)'
 
 # fix thse isseue.md #7: the final card-spacing polish aligns the gap BETWEEN
 # stacked Group cards to the 4px scale (kSpace3), so the stack breathes evenly.
@@ -757,7 +1231,10 @@ Head "PART 2 (pass 6): fix thse isseue.md UI polish re-review"
 # moves S(20) -> S(24) (kSelRowH mirror = 24), the file icon stays 16 and the
 # icon->text gap is 8. The tokens are unit-tested (row_rhythm_test); the live
 # owner-draw stride + the header separator breathing (#5) are pinned here.
-AssertPresent "Selected Items row height is the taller 24px (pass6 #1)"      'const int rowH  = S\(24\)'
+# fix thse isseue.md Phase A: the List-mode row height now comes from the tested
+# viewmode::RowHeight(List) == 24 (grid modes scale taller); the 24px List value
+# is still the baseline, pinned via the model and the kSelRowH mirror below.
+AssertPresent "Selected Items List row height = the model's 24px (pass6 #1 / Phase A)" 'S\(viewmode::RowHeight\(vmode\)\)'
 AssertPresent "Selected Items row-height mirror is 24 (pass6 #1)"            'kSelRowH\s*=\s*24'
 AssertPresent "row icon -> text gap is 8 (pass6 #1)"                         'kRowIconGap = 8'
 # fix thse isseue.md #1/#3: the Selected header uses an EVEN breathing rhythm
@@ -773,7 +1250,7 @@ AssertPresent "Selected header divider is a thin, light hairline (#1)"      'HPE
 AssertPresent "layout derives the padded Selected content rect (#3)"        'L.selectedContent = Rect\{kOuterMargin \+ kSelectedPad'
 AssertPresent "Selected card content padding mirror is 20 / kSpace5 (#3)"   'kSelectedPad\s*=\s*kSpace5'
 AssertPresent "Selected list HWND is created inside the padded content (#3)" 'S\(L.selectedContent.x\), S\(L.selectedContent.y\)'
-AssertPresent "relayout moves the Selected list to selectedContent (#3)"    'deferMove\(d->groupInfo,   L.selectedContent\)'
+AssertPresent "relayout moves the Selected list to selectedContent (#3)"    'queueMove\(d->groupInfo,   L.selectedContent\)'
 AssertAbsent  "Selected list HWND no longer spans the whole card (#3)"      'deferMove\(d->groupInfo,   L.groupHeader\)'
 
 # #3: more horizontal padding INSIDE every card -- card outer->content 12 -> 16
@@ -883,9 +1360,8 @@ if ($epgDeclIdx -ge 0 -and $structDefIdx -ge 0 -and $epgDefMatch.Success -and
 AssertPresent "badge chip fill slot in the palette"             'COLORREF badgeFill;'
 AssertPresent "badge chip border slot in the palette"           'COLORREF badgeBorder;'
 AssertPresent "badge chip tokens defined (light + dark)"        'kColBadgeDark\b'
-AssertPresent "ext badge inherit-default fill is the badge chip token (#12)"   'fillCol\s+= pal\.badgeFill'
-AssertPresent "ext badge inherit-default border is the badge chip token (#12)" 'borderCol\s+= pal\.badgeBorder'
-AssertPresent "ext badge pill is painted from the resolved fill/border (#12)"  'CreateSolidBrush\(fillCol\)'
+# fix thse isseue.md Phase 1B: the EXT pill is no longer painted, so the badge
+# palette slots above are pinned as THEME TOKENS only (no renderer-use pin).
 
 # --------------------------------------------------------------------------
 # Pass7 S8 (fix thse isseue.md #9/#14): the extension pill HAIRLINE must be
@@ -894,8 +1370,7 @@ AssertPresent "ext badge pill is painted from the resolved fill/border (#12)"  '
 # the badge paint uses it for the border while the text keeps the full ink.
 # --------------------------------------------------------------------------
 AssertPresent "soft badge border helper mirrored into the mod (#9/#14)"        'inline unsigned SoftBorder\('
-AssertPresent "badge border uses the softer SoftBorder tone (#9/#14)"          'badgecolor::SoftBorder\(chip\)'
-AssertAbsent  "badge border is no longer the full-strength text ink (#9/#14)"  'borderCol = ink;'
+AssertAbsent  "badge border is no longer the full-strength text ink (#9/#14)"  'extBorderCol = extInk;'
 
 # --------------------------------------------------------------------------
 # Pass7 S9 (fix thse isseue.md #2/#12): custom rounded SURFACES move from GDI
@@ -1060,7 +1535,12 @@ AssertAbsent  "title-band separator line is gone (#4)"                    'MoveT
 # duplicate drawn folder vector icon (and its tIconRc setup) was removed -- no
 # icon on/off, the emoji is always the one title glyph.
 AssertAbsent  "window title no longer draws a DUPLICATE folder vector icon (#1)" 'IconId::Folder, tIconRc'
-AssertPresent "window title still paints its single emoji folder caption (#1)"   'Group into folder", -1, &tText'
+AssertPresent "window title still paints its single emoji folder caption (Phase 6: Title Case)" 'Group into Folder", -1, &tText'
+# fix thse isseue.md Phase 6: the Ctrl+G popup title is Title-Cased "Group into
+# Folder" (capital F) -- BOTH the painted caption AND the CreateWindowExW window
+# text -- while the New Folder popup keeps its own untouched "New folder" title.
+AssertPresent "Phase 6: Ctrl+G window text is Title-Cased 'Group into Folder'"   'isGroup \? L"\\U0001F4C2 Group into Folder"'
+AssertAbsent  "Phase 6: no lowercase 'Group into folder' title literal remains"  'U0001F4C2 Group into folder'
 # fix thse isseue.md #1: Selected Items + Copy/Move revert to EMOJI and the
 # Status heading shows the chosen status SYMBOL in its state tone, instead of the
 # v0.12.57 generic semantic glyphs. Destination/Name/Action headings KEEP the
@@ -1130,6 +1610,300 @@ AssertPresent "Name field frame aligned to the field bounds, no spill (fix thse 
 AssertPresent "Dest field frame aligned to the field bounds, no spill (fix thse isseue.md #2)"  'RECT dfr = \{S2\(L.destField.x\), S2\(L.destField.y\),'
 AssertPresent "field frame = field bounds, zero spill mirrored into the mod (#2)"             'inline int FrameSpillPx\(\) \{ return 0; \}'
 AssertPresent "field OuterFrameRect identity helper mirrored into the mod (#2)"               'inline FrameRect OuterFrameRect\(int fx, int fy, int fw, int fh\)'
+
+Head "fix thse isseue.md v0.12.61 refresh: chips, countdown, encoding, right inset"
+
+# #5 Auto Group countdown: a STABLE M:SS label; the flashing second:millisecond
+# OverlayText/OverlayMillis path is gone and the button is a real disabled ctrl.
+AssertPresent "countdown uses the stable M:SS CountdownText model (#5)"     'CountdownText\(int remainingSeconds\)'
+AssertPresent "countdown painter draws agcd::CountdownText (#5)"            'agcd::CountdownText\('
+AssertAbsent  "flashing OverlayText(sec,ms) path removed (#5)"              'OverlayText\('
+AssertAbsent  "flashing OverlayMillis path removed (#5)"                    'OverlayMillis\('
+AssertPresent "Auto Group button is really disabled until the delay (#5)"   'EnableWindow\(autoBtn, FALSE\)'
+AssertPresent "timer repaints only on a visible state change (#5)"          'autoGroupLastSec'
+# Phase 4: the per-tick InvalidateRect is gated by the unit-tested
+# agcd::ShouldRepaint model (repaint only when the visible second or the
+# enabled state changes), so the anti-flicker contract cannot silently regress.
+AssertPresent "timer repaint gated by the tested ShouldRepaint model (#4)"  'agcd::ShouldRepaint\(secs'
+
+# #1 summary chips: dedicated sumchip:: pill design (semibold, padding, radius).
+AssertPresent "summary chips use the dedicated sumchip:: geometry (#1)"     'sumchip::ChipHeight'
+AssertPresent "summary chips drawn with the semibold UI font (#1)"          'UiFontSemibold\(dpi\)'
+
+# #2 chip interactions: live filter state + hit rects + non-destructive highlight.
+AssertPresent "chip clicks drive chipfilter::ActivateExt (#2)"              'chipfilter::ActivateExt'
+AssertPresent "Folders / No-extension chips are live filters (#2)"          'chipfilter::ActivateFolders'
+AssertPresent "row highlight applies chipfilter::RowFor (#2)"               'chipfilter::RowFor\(chipState'
+# Phase 2A: the ACTIVE chip is marked by the dotted outline (tested model), with
+# NO second accent fill overlaid on the chip.
+AssertPresent "active chip uses the tested dotted-outline model (#2A)"      'chipfilter::ChipShowsDottedOutline\('
+AssertAbsent  "active chip no longer nudges its fill toward the accent (#2A)" 'GetRValue\(cFill\), GetRValue\(pal\.createFill\)'
+
+# #3 horizontal chip scroll + Show-extensions toggle, via the tested models.
+AssertPresent "chip strip pans horizontally via chipscroll:: (#3)"          'chipscroll::OnWheel\(data.chipScrollOffset'
+AssertPresent "toolbar region reserved via chiptoolbar::Compute (#3)"       'chiptoolbar::Compute\('
+AssertPresent "Show-extensions toggle flips showExt live (#3)"              'data.showExt = !data.showExt'
+# Phase 3: the toggle is a COMPACT unlabeled ON/OFF switch (tested geometry +
+# accessible name), with NO inline text label drawn.
+AssertPresent "compact switch width via the tested model (#3)"              'showext::SwitchTrackW\(chipH\)'
+AssertPresent "switch knob positioned by the tested model (#3)"             'showext::SwitchKnobLeft\('
+AssertPresent "switch has an accessible name (no visible label) (#3)"       'showext::AccessibleName\(\)'
+AssertAbsent  "Show-extensions toggle no longer draws a text label (#3)"    'DrawTextW\(hdc, showext::ToggleLabel\(\)'
+
+# #4 selected-list dedicated right content inset (not a second card inset).
+AssertPresent "selected list uses a dedicated right content inset (#4)"     'kSelListRightInset'
+AssertPresent "inner right edge = child right minus the inset (#4)"         'rc.right - S\(layout::kSelListRightInset\)'
+
+# #6 UI emoji literals restored as explicit, encoding-independent escapes.
+AssertPresent "title-bar folder emoji is an explicit \\U escape (#6)"       'L"\\U0001F4C2 Group into Folder"'
+AssertPresent "Copy clipboard emoji is an explicit \\U escape (#6)"         'L"\\U0001F4CB"'
+AssertPresent "Selected Items card index emoji is an explicit escape (#6)"  'L"\\U0001F5C2\\uFE0F"'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 6 -- VERIFY existing features (not reimplemented).
+# Show Extensions is ON by default (a new Group popup shows complete filenames)
+# and the Auto Group safety delay is the full EIGHT seconds (never bypassed).
+# The countdown repaint gating / double-buffering is pinned by the Issue 7
+# checks above; image previews being grid-only is pinned by the Phase 3 checks.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 6: Show Extensions defaults ON (full filenames by default)" 'bool showExt = true;'
+AssertPresent "Phase 6: Auto Group 8-second safety delay preserved (never bypassed)" 'DelayMs\(\) \{ return 8000; \}'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md (navigation-help card polish) -- the hover card is a little
+# bigger (wider + taller), has more margin/padding, REUSES the Selected Items
+# thick scrollbar width (listscroll::kScrollbarW) for its internal scrollbar,
+# and the help text supports MONO (`literal`) and ITALIC (_hint_) runs drawn in
+# Windows-default faces (Consolas / Segoe UI italic) in addition to bold keys.
+# The run grammar is the tested info_help_logic.h model (tests/info_help_test).
+# --------------------------------------------------------------------------
+AssertPresent "Nav help: run model carries mono + italic (mirrored)"              'bool mono = false; bool italic = false;'
+AssertPresent "Nav help: ParseRuns toggles a `backtick` mono span"                'mono = !mono;'
+AssertPresent "Nav help: ParseRuns toggles an _underscore_ italic span"           'italic = !italic;'
+AssertPresent "Nav help: an italic Windows-default help font exists"              'static HFONT UiFontItalic\(UINT dpi\)'
+AssertAtLeast "Nav help: the help renderer selects the mono/italic faces"         'run\.mono\s*\? UiFontMonoBold\(dpi\)' 2
+AssertAtLeast "Nav help: the card REUSES the Selected Items thick scrollbar width" 'listscroll::kScrollbarW \+ 4' 2
+AssertPresent "Nav help: the card width is the 360+16=376-logical-px spec (add-on section 3)"      'maxCardW\s*= S\(376\)'
+AssertPresent "Nav help: the card MAX height is the 320+20=340-logical-px spec (add-on section 3)" 'maxCardH\s*= S\(340\)'
+AssertPresent "Nav help: 6 px heading-to-content spacing (add-on section 1)"                       'sectionGapBottom = S\(6\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 3 -- the thumbnail pipeline is INTACT and the display
+# path is structurally sound (no redesign; the cache is NOT disabled). The pure
+# eligibility + fit model (namespace thumbs, tests/thumb_logic.h +
+# tests/thumb_test.cpp) gates thumbnails to grid + non-folder + image only (List
+# keeps icons); the worker requests a REAL content thumbnail (SIIGBF_
+# THUMBNAILONLY) and CHECKS the GetImage HRESULT (never assumes success); and the
+# completion repaint is targeted at the Selected list (geometry-neutral -- the
+# card geometry is identical whether the cache hits or misses, since the layout
+# never reads thumbnail state). Live cache hit/miss + actual pixel display are
+# verified on-device.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 3: grid paint requests a thumbnail only for eligible items"  'thumbs::WantsThumbnailFor\('
+AssertPresent "Phase 3: a REAL content thumbnail is requested (THUMBNAILONLY)"    'SIIGBF_THUMBNAILONLY'
+AssertPresent "Phase 3: the GetImage HRESULT is CHECKED, not assumed"             'SUCCEEDED\(factory->GetImage\('
+AssertPresent "Phase 3: thumbnail completion repaints the Selected list only"     'msg.message == WM_APP_THUMB_READY'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 4 -- a Ctrl+wheel view-mode switch must not flash the
+# whole popup. The pure decision model (layout::ViewSwitchRepaintFor, mirrored
+# from tests/layout_logic.h and covered by tests/view_switch_repaint_test.cpp)
+# compares the old vs new effective layout; the live handler repaints ONLY the
+# Selected Items viewport (targeted InvalidateRect, erase FALSE -- same as the
+# thumbnail-ready path) when the sections do not move, and only takes the single
+# atomic ApplyPromptLayout when a section genuinely moves. The thumbnail
+# completion repaint stays targeted (never a full-window invalidation).
+# --------------------------------------------------------------------------
+AssertPresent "Phase 4: view-switch repaint model mirrored into the mod"         'enum class ViewSwitchRepaint'
+AssertPresent "Phase 4: SectionsUnchanged comparator mirrored"                   'inline bool SectionsUnchanged\('
+AssertPresent "Phase 4: ViewSwitchRepaintFor decision mirrored"                  'inline ViewSwitchRepaint ViewSwitchRepaintFor\('
+AssertPresent "Phase 4: Ctrl+wheel picks the repaint scope via the model"        'layout::ViewSwitchRepaintFor\(oldL, newL\)'
+AssertAtLeast "Phase 4: Selected-only + thumbnail repaints are targeted (no erase)" 'InvalidateRect\(data\.groupInfo, nullptr, FALSE\)' 2
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 2 -- the Selected-Items geometry is MODE-AWARE in
+# EVERY window state. layout::ReflowToClient takes a mode row height so its
+# shrink floor and row-cap reserve a WHOLE grid cell (viewmode::CellH) instead
+# of a 24px List row; ComputeEffectiveLayout grid-sizes the base UNCONDITIONALLY
+# and hands the reflow that cell height + whole-cell cap; and WM_SIZE routes the
+# resize/maximize relayout through that SINGLE authority rather than rebuilding a
+# List-based (24px) override inline. These are structural facts the (un-
+# compilable) Win32 resize path must satisfy.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 2: ReflowToClient is mode-aware (selRowH parameter)"        'int selRowH = kSelRowH,'
+AssertPresent "Phase 2: reflow shrink floor reserves one WHOLE cell/row"         'kMinSelReflowH = selHeaderBlockH \+ selRowH;'
+AssertPresent "Phase 2: grid row-cap derived from the mode row height (not 24)"  'base\.selectedList\.h / selRowH'
+AssertPresent "Phase 2: ComputeEffectiveLayout feeds the reflow the cell height" 'selRowHForReflow, selCapForReflow, rowsNeededForReflow\)'
+AssertPresent "Phase 2: WM_SIZE routes through the single mode-aware layout"     'layout::PromptLayout reflowed = ComputeEffectiveLayout\(hwnd, d\)'
+# v0.12.69 spec section 2 (P0 dead space): a maximized / manually resized List
+# fills the viewport (physical whole-row capacity) instead of keeping the
+# compact 4-row / expanded 9-row cap, so there is no blank tail; preferred
+# popups keep their declared cap. The renderer uses the tested resizable model.
+AssertPresent "Spec #2: List fills the viewport when user-sized (no 4/9 dead space)" 'listscroll::EffectiveVisibleRowsResizable\('
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md Phase 5 + ADD-ON -- a summary chip is BOTH a filter and a
+# find-navigator. The pure result-navigation model (namespace chipnav, mirrored
+# from tests/chip_nav_logic.h and covered by tests/chip_nav_test.cpp) is present
+# in the mod; the chip-click handler drives it (first click reveals the first
+# match, re-click cycles to the next with wrap-around), the current match is
+# tracked as a STABLE item index kept SEPARATELY from the filter, and BOTH the
+# List and the grid renderers outline the current match. The matching rule is
+# NOT duplicated -- chipnav::Matches delegates to chipfilter::RowFor.
+# --------------------------------------------------------------------------
+AssertPresent "Phase 5: chipnav result-navigation model mirrored into the mod"    'namespace chipnav'
+AssertPresent "Phase 5: chipnav::Matches delegates to chipfilter::RowFor"         'chipfilter::RowFor\(s, items\[i\]\.extKey'
+AssertPresent "Phase 5: chipnav::NextMatch (first match + cycle/wrap) mirrored"   'inline int NextMatch\('
+AssertPresent "Phase 5: chipnav::RevealTopRow (minimal scroll) mirrored"          'inline int RevealTopRow\('
+AssertPresent "Phase 5: chipnav::IsCurrentMatch (current-match state) mirrored"   'inline bool IsCurrentMatch\('
+AssertPresent "Phase 5: chip click handler cycles matches via chipnav::NextMatch" 'chipnav::NextMatch\('
+AssertPresent "Phase 5: chip click handler reveals the match via RevealTopRow"    'chipnav::RevealTopRow\('
+AssertPresent "Phase 5: current match tracked as a stable item index"             'int chipNavItem = -1;'
+AssertPresent "Phase 5: handler stores the navigated match index"                 'data\.chipNavItem = nextItem;'
+AssertAtLeast "Phase 5: current match tested in BOTH List and grid renderers"     'chipnav::IsCurrentMatch\(' 2
+AssertAtLeast "Phase 5: current-match accent outline drawn in BOTH views"         'DrawCurrentMatchOutline\(hdc' 2
+
+# #6 mojibake source-invariant: NO UTF-8-decoded-as-CP1252 corruption remains in
+# the mod source or the README. Patterns are built from code points so this
+# check file itself stays pure ASCII and encoding-independent. Normal code
+# identifiers and comments (plain ASCII) can never match.
+# --------------------------------------------------------------------------
+# fix thse isseue.md P1 -- Group destination SAFETY. Two structural facts a
+# unit test cannot see on the un-compilable TU:
+#   * the destination type is validated (an existing path must be a DIRECTORY,
+#     never a file) via the mirrored GroupDestinationUsable predicate, and
+#   * that validation -- plus the self/descendant guard -- happens BEFORE any
+#     filesystem side effect (CreateFolderWithShellElevation), so a rejected
+#     op never leaves an empty directory behind.
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md P1: Group destination type + validation ordering"
+AssertPresent "Group: GroupDestinationUsable predicate mirrored into the mod"        'static bool GroupDestinationUsable\('
+AssertPresent "Group: a file occupying the destination is refused, not reused"       'is a file, not a folder -- aborting'
+AssertPresent "Group: the dest re-check uses PathIsDirectoryW, not mere existence"   'PathIsDirectoryW\(destFolder\.c_str\(\)\)'
+AssertPresent "Group: destination-type check runs BEFORE the folder is created"      'static bool PerformGroupOperation\([\s\S]*?is a file, not a folder[\s\S]*?CreateFolderWithShellElevation'
+AssertPresent "Group: self/descendant check runs BEFORE the folder is created"       'static bool PerformGroupOperation\([\s\S]*?refusing to place[\s\S]*?CreateFolderWithShellElevation'
+AssertAbsent  "Group: no create happens before the destination-type validation"      'static bool PerformGroupOperation\([\s\S]*?CreateFolderWithShellElevation[\s\S]*?is a file, not a folder'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md P1 -- grid geometry UNIT CONTRACT + exact-fit dead space.
+# Structural facts a unit test cannot see on the un-compilable TU:
+#   * the owner-draw grid math converts the DEVICE viewport width/height back to
+#     LOGICAL (96-dpi) units (MulDiv(.,96,dpi)) BEFORE calling the logical-cell
+#     viewmode:: helpers -- so columns/visible-rows are DPI-independent; and
+#   * ReflowToClient decides "row-capped" from the TRUE rows-needed, never from
+#     bare equality with the declared row cap (the exact-fit dead-space bug).
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md P1: DPI grid unit contract + exact-fit dead space"
+AssertPresent "DPI: owner-draw converts the grid width to logical before Columns"   'MulDiv\(\(right - left\) - gridGutter, 96'
+AssertPresent "DPI: owner-draw converts the grid viewport to logical before rows"   'MulDiv\(rowsViewportH, 96'
+AssertAbsent  "DPI: no raw device width is fed to viewmode::Columns"                 'viewmode::Columns\(vmode, \(right - left\) - gridGutter\)'
+AssertAbsent  "DPI: no raw device viewport is fed to SelectedGridVisibleRows"        'selCols, rowsViewportH\)'
+AssertPresent "Exact-fit: ReflowToClient is overflow-driven (rows needed > visible)" 'rowsNeededOverride > baseVisRows'
+AssertAbsent  "Exact-fit: the bare equality-with-cap heuristic is no longer the sole test" 'const bool selRowCapped = baseVisRows >= selCapRows;'
+AssertPresent "Exact-fit: the effective-layout reflow passes the true rows-needed"  'selRowHForReflow, selCapForReflow, rowsNeededForReflow'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md P1 -- centralized keyboard focus routing + row-viewport
+# wheel routing. Structural facts a unit test cannot see on the un-compilable TU:
+#   * chip Left/Right AND list Up/Down/Home/End/Page keys both route through the
+#     ONE focusroute classifier, which now includes every interactive control
+#     (closeBtn etc. were previously omitted); and
+#   * the vertical wheel is routed by the REAL item-row viewport the painter
+#     caches, via the tested viewmode::WheelScrollsRows, not the whole control.
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md P1: centralized focus routing + row-viewport wheel"
+AssertPresent "Focus: centralized focusroute classifier mirrored into the mod"      'namespace focusroute'
+AssertAtLeast "Focus: chip + list keys both route via NavKeysDriveChipsOrList"      'focusroute::NavKeysDriveChipsOrList' 2
+AssertPresent "Focus: the CHIP router now classifies closeBtn (was omitted)"        'cfw == data\.closeBtn'
+AssertPresent "Focus: the LIST router now classifies closeBtn (was omitted)"        'fw == data\.closeBtn'
+AssertPresent "Wheel: the painter caches the real item-row viewport rect"           'd->listRowsRect = RECT\{'
+AssertPresent "Wheel: routing uses the tested viewmode::WheelScrollsRows"           'viewmode::WheelScrollsRows\('
+AssertPresent "Wheel: the hit-test is the row viewport, not the whole control"      'PtInRect\(&data\.listRowsRect, clientPt\)'
+AssertAbsent  "Wheel: no longer routes the list wheel by the whole control rect"    'listscroll::WheelScrollsList\(overList\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md P1 (13565-13620 / 14299-14320) -- honest partial Group
+# result counts. Structural facts a unit test cannot see on the un-compilable
+# TU: PerformGroupOperation must tally every item bucket and hand the caller an
+# HONEST summary, and the Ctrl+G caller must log that computed count -- never
+# the raw selection size (sel.size()).
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md P1: honest partial Group result counts"
+AssertPresent "Group result: honest accounting model mirrored into the mod"          'namespace groupresult'
+AssertPresent "Group result: PerformGroupOperation exposes an honest summary"         'GroupResultSummary\* outSummary'
+AssertPresent "Group result: every considered item is counted as requested"          '\+\+requested'
+AssertPresent "Group result: failed-to-queue items are tallied, not dropped"          '\+\+failedToQueue'
+AssertPresent "Group result: the summary is classified from the raw tallies"          'ClassifyGroupResult\(outcome\)'
+AssertPresent "Group result: the Ctrl+G caller passes the summary out-param"          'PerformGroupOperation\(sel, destFolder, isMove, groupOrigin, &summary\)'
+AssertPresent "Group result: the caller logs the honest partial count"                'grouped %s%d of %d item\(s\)'
+AssertAbsent  "Group result: caller no longer logs the raw selection size as grouped" 'grouped %zu item\(s\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md item 6 -- deferred-layout fallback, help-class registration
+# flag, GDI defensiveness, and a REAL accessible name for the custom-drawn
+# Show-extensions switch. Structural facts a unit test cannot see on the
+# un-compilable TU (the pure decisions are pinned by tests\failguard_test.cpp
+# and tests\show_ext_test.cpp).
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md item 6: failure-handling + accessibility wiring"
+AssertPresent "Defer: individual-move fallback model mirrored into the mod"          'namespace layoutdefer'
+AssertPresent "Defer: ApplyPromptLayout falls back when the batch cannot commit"     'layoutdefer::NeedsIndividualFallback\('
+AssertPresent "Defer: the fallback repositions each child with SetWindowPos"         'SetWindowPos\(moves\[i\]\.h'
+AssertPresent "HelpClass: registration-usable model mirrored into the mod"           'namespace helpclass'
+AssertPresent "HelpClass: the static reg flag is gated on RegistrationUsable"        'helpclass::RegistrationUsable\('
+AssertPresent "GDI: defensive font create/select model mirrored into the mod"        'namespace gdiguard'
+AssertPresent "GDI: the glyph is drawn only when font created AND selected"          'gdiguard::ShouldDrawGlyph\('
+AssertPresent "GDI: a created font is always deleted (no leak on failure)"           'gdiguard::MustDeleteCreatedFont\('
+AssertPresent "Access: the Show-ext switch name is wired to a real tooltip"          'EnsureExtToggleTip\('
+AssertPresent "Access: the tooltip text is the state-aware accessible label"         'TTM_UPDATETIPTEXT'
+AssertAbsent  "Access: the accessible name is no longer computed-and-discarded"      'toggleAccName'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md item 7 -- Auto Group O(buckets x files) -> one-pass map,
+# and bounded + de-duplicated thumbnail caching. Structural facts a unit test
+# cannot see on the un-compilable TU (pure models pinned by tests\perf_test.cpp).
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md item 7: Auto Group + thumbnail-cache performance"
+AssertPresent "AutoGroup perf: one-pass bucket model mirrored into the mod"          'namespace autogroupbucket'
+AssertPresent "AutoGroup perf: file->bucket map is built in ONE pass"                'bucketMap\[autogroupbucket::NormalizeDirKey\(f\.destDir\)\]'
+AssertPresent "AutoGroup perf: each bucket is a map lookup, not a file rescan"       'bucketMap\.find\(autogroupbucket::NormalizeDirKey\(dir\)\)'
+AssertAbsent  "AutoGroup perf: the O(buckets x files) inner rescan is gone"          'PathEqualCI\(f\.destDir, dir\)'
+AssertPresent "Thumbnail perf: bounded-cache model mirrored into the mod"            'namespace thumbcache'
+AssertPresent "Thumbnail perf: duplicate requests are not re-enqueued (dedup)"       'thumbcache::ShouldEnqueue\(found\)'
+AssertPresent "Thumbnail perf: the cache is bounded (evict past the cap)"            'thumbcache::ShouldEvict\('
+AssertPresent "Thumbnail perf: an evicted entry's bitmap is freed (no GDI leak)"     'DeleteObject\(d->thumbCache\[i\]\.second\.bmp\)'
+
+# --------------------------------------------------------------------------
+# fix thse isseue.md section 3 -- dead code removed. These AssertAbsent checks
+# match the removed DEFINITIONS (not the explanatory comments that still name
+# the symbols) so the unused helpers/constants cannot creep back unnoticed.
+# --------------------------------------------------------------------------
+Head "fix thse isseue.md section 3: dead code removed"
+AssertAbsent "Dead code: FinalRepaintCoversChildren() definition removed from the mod" 'inline constexpr bool FinalRepaintCoversChildren'
+AssertAbsent "Dead code: GroupOperationLabelText() helper removed from the mod"         'static std::wstring GroupOperationLabelText'
+AssertAbsent "Dead code: BuildGroupPanelText() obsolete text builder removed from the mod" 'std::wstring BuildGroupPanelText\('
+AssertAbsent "Dead code: the unused danger-red palette removed from the mod"            'COLORREF kColDangerLight'
+
+Head "fix thse isseue.md #6: mojibake source-invariant (mod + README)"
+$mojiPatterns = @(
+    ([char]0x00F0 + [char]0x0178),   # 'd Y' lead of any U+1Fxxx emoji (folder/clipboard/index/...)
+    ([char]0x00E2 + [char]0x20AC),   # 'a EUR' em dash / general-punctuation mojibake
+    ([char]0x00E2 + [char]0x0153),   # 'a oe' check-mark / pencil mojibake lead
+    ([char]0x00EF + [char]0x00B8),   # 'i ,' U+FE0F variation-selector mojibake
+    ([char]0x00C2 + [char]0x00B7)    # 'A middot' middle-dot mojibake
+)
+$mojiHits = 0
+$mojiScan = @($ModFile, (Join-Path $RepoRoot 'README.md'))
+foreach ($mf in $mojiScan) {
+    if (-not (Test-Path $mf)) { continue }
+    $mtxt = [IO.File]::ReadAllText($mf, [Text.Encoding]::UTF8)
+    foreach ($mp in $mojiPatterns) {
+        if ($mtxt.Contains([string]$mp)) { $mojiHits++ }
+    }
+}
+if ($mojiHits -eq 0) { Ok "no mojibake sequences in the mod source or README (#6)" }
+else { Bad ("mojibake sequences present in UI strings / docs (#6): {0} hit(s)" -f $mojiHits) }
+
 if ($fail -eq 0) {
     Write-Host "RESULT : PASS" -ForegroundColor Green
     exit 0
